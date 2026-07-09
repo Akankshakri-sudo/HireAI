@@ -3,6 +3,8 @@ from app.database.base import Base
 
 # Import models so SQLAlchemy registers them
 from app.modules.auth import models
+from app.modules.candidate import models as candidate_models
+
 
 
 async def init_db():

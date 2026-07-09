@@ -1,5 +1,6 @@
 from contextlib import asynccontextmanager
 from app.modules.auth.router import router as auth_router
+from app.modules.candidate.router import router as candidate_router
 from fastapi import FastAPI
 
 from app.core.config import settings
@@ -19,6 +20,7 @@ app = FastAPI(
     lifespan=lifespan,
 )
 app.include_router(auth_router)
+app.include_router(candidate_router)
 
 @app.get("/")
 def root():
