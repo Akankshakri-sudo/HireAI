@@ -1,4 +1,7 @@
-from fastapi import HTTPException
+import os
+import uuid
+
+from fastapi import HTTPException, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.auth.models import User
@@ -36,4 +39,80 @@ class CandidateService:
             experience=profile_data.experience
         )
 
-        return await CandidateRepository.create_profile(db, profile)
+        return await CandidateRepository.create_profile(
+            db,
+            profile
+        )
+
+    @staticmethod
+    async def get_profile(
+        db: AsyncSession,
+        current_user: User
+    ):
+        profile = await CandidateRepository.get_profile_by_user_id(
+            db,
+            current_user.id
+        )
+
+        if not profile:
+            raise HTTPException(
+                status_code=404,
+                detail="Candidate profile not found"
+            )
+
+        return profile
+
+    @staticmethod
+    async def upload_resume(
+        db: AsyncSession,
+        current_user: User,
+        file: UploadFile
+    ):
+        profile = await CandidateRepository.get_profile_by_user_id(
+            db,
+            current_user.id
+        )
+
+        if not profile:
+            raise HTTPException(
+                status_code=404,
+                detail="Candidate profile not found"
+            )
+
+        if not file.filename:
+            raise HTTPException(
+                status_code=400,
+                detail="Filename is missing"
+            )
+
+        allowed_extensions = {".pdf", ".docx"}
+        file_extension = os.path.splitext(file.filename)[1].lower()
+
+        if file_extension not in allowed_extensions:
+            raise HTTPException(
+                status_code=400,
+                detail="Only PDF and DOCX files are allowed"
+            )
+
+        upload_dir = os.path.join("uploads", "resumes")
+        os.makedirs(upload_dir, exist_ok=True)
+
+        unique_filename = f"{uuid.uuid4()}{file_extension}"
+        file_path = os.path.join(upload_dir, unique_filename)
+
+        content = await file.read()
+
+        if not content:
+            raise HTTPException(
+                status_code=400,
+                detail="Uploaded file is empty"
+            )
+
+        with open(file_path, "wb") as buffer:
+            buffer.write(content)
+
+        return await CandidateRepository.update_resume_path(
+            db,
+            profile,
+            file_path
+        )

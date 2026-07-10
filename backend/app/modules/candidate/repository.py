@@ -19,3 +19,16 @@ class CandidateRepository:
         await db.commit()
         await db.refresh(profile)
         return profile
+    
+    @staticmethod
+    async def update_resume_path(
+        db: AsyncSession,
+        profile: CandidateProfile,
+        resume_path: str
+    ):
+        profile.resume_path = resume_path
+
+        await db.commit()
+        await db.refresh(profile)
+
+        return profile

@@ -1,6 +1,6 @@
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 from app.modules.auth.models import User
 
 
@@ -29,3 +29,5 @@ class AuthRepository:
         await db.refresh(user)
 
         return user
+    
+    
