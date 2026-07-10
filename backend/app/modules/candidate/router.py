@@ -10,6 +10,7 @@ from app.modules.candidate.schemas import (
     CandidateProfileCreate,
     CandidateProfileResponse,
     ResumeParseResponse,
+    ResumeAnalysisResponse,
 )
 
 from app.modules.candidate.service import CandidateService
@@ -76,4 +77,16 @@ async def parse_resume(
     return await CandidateService.parse_resume(
         db,
         current_user
+    )
+@router.post(
+    "/resume/analyze",
+    response_model=ResumeAnalysisResponse,
+)
+async def analyze_resume(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    return await CandidateService.analyze_resume(
+        db,
+        current_user,
     )

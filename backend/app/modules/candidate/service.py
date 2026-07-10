@@ -8,7 +8,7 @@ from app.modules.auth.models import User
 from app.modules.candidate.models import CandidateProfile
 from app.modules.candidate.repository import CandidateRepository
 from app.modules.candidate.schemas import CandidateProfileCreate
-
+from app.modules.candidate.skill_extractor import extract_skills
 
 class CandidateService:
 
@@ -173,4 +173,59 @@ class CandidateService:
         return {
             "resume_path": profile.resume_path,
             "extracted_text": extracted_text
+        }
+    @staticmethod
+    async def analyze_resume(
+        db: AsyncSession,
+        current_user: User
+    ):
+        profile = await CandidateRepository.get_profile_by_user_id(
+            db,
+            current_user.id
+        )
+
+        if not profile:
+            raise HTTPException(
+                status_code=404,
+                detail="Candidate profile not found"
+            )
+
+        if not profile.resume_path:
+            raise HTTPException(
+                status_code=400,
+                detail="Please upload a resume first"
+            )
+
+        file_extension = os.path.splitext(
+            profile.resume_path
+        )[1].lower()
+
+        if file_extension != ".pdf":
+            raise HTTPException(
+                status_code=400,
+                detail="Resume analysis currently supports PDF files only"
+            )
+
+        if not os.path.exists(profile.resume_path):
+            raise HTTPException(
+                status_code=404,
+                detail="Resume file not found on server"
+            )
+
+        extracted_text = extract_text_from_pdf(
+            profile.resume_path
+        )
+
+        if not extracted_text:
+            raise HTTPException(
+                status_code=422,
+                detail="No readable text found in the resume"
+            )
+
+        skills = extract_skills(extracted_text)
+
+        return {
+            "resume_path": profile.resume_path,
+            "skills": skills,
+            "total_skills_found": len(skills)
         }

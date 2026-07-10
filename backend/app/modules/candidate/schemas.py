@@ -23,3 +23,8 @@ class CandidateProfileResponse(CandidateProfileCreate):
 class ResumeParseResponse(BaseModel):
     resume_path: str
     extracted_text: str
+    
+class ResumeAnalysisResponse(BaseModel):
+    resume_path: str
+    skills: list[str]
+    total_skills_found: int
