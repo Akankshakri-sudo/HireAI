@@ -1,6 +1,6 @@
 import os
 import uuid
-
+from app.modules.candidate.resume_parser import extract_text_from_pdf
 from fastapi import HTTPException, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -116,3 +116,61 @@ class CandidateService:
             profile,
             file_path
         )
+    @staticmethod
+    async def parse_resume(
+        db: AsyncSession,
+        current_user: User
+    ):
+        profile = await CandidateRepository.get_profile_by_user_id(
+            db,
+            current_user.id
+        )
+
+        if not profile:
+            raise HTTPException(
+                status_code=404,
+                detail="Candidate profile not found"
+            )
+
+        if not profile.resume_path:
+            raise HTTPException(
+                status_code=400,
+                detail="Please upload a resume first"
+            )
+
+        file_extension = os.path.splitext(
+            profile.resume_path
+        )[1].lower()
+
+        if file_extension != ".pdf":
+            raise HTTPException(
+                status_code=400,
+                detail="Resume parsing currently supports PDF files only"
+            )
+
+        if not os.path.exists(profile.resume_path):
+            raise HTTPException(
+                status_code=404,
+                detail="Resume file not found on server"
+            )
+
+        try:
+            extracted_text = extract_text_from_pdf(
+                profile.resume_path
+            )
+        except Exception:
+            raise HTTPException(
+                status_code=500,
+                detail="Unable to parse the resume"
+            )
+
+        if not extracted_text:
+            raise HTTPException(
+                status_code=422,
+                detail="No readable text found in the resume"
+            )
+
+        return {
+            "resume_path": profile.resume_path,
+            "extracted_text": extracted_text
+        }

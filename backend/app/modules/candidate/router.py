@@ -9,6 +9,7 @@ from app.modules.auth.models import User
 from app.modules.candidate.schemas import (
     CandidateProfileCreate,
     CandidateProfileResponse,
+    ResumeParseResponse,
 )
 
 from app.modules.candidate.service import CandidateService
@@ -63,4 +64,16 @@ async def upload_resume(
         db,
         current_user,
         file
+    )
+@router.post(
+    "/resume/parse",
+    response_model=ResumeParseResponse
+)
+async def parse_resume(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    return await CandidateService.parse_resume(
+        db,
+        current_user
     )

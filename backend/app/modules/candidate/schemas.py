@@ -19,3 +19,7 @@ class CandidateProfileResponse(CandidateProfileCreate):
     model_config = {
         "from_attributes": True
     }
+
+class ResumeParseResponse(BaseModel):
+    resume_path: str
+    extracted_text: str
