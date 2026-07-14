@@ -11,6 +11,8 @@ from app.modules.candidate.schemas import (
     CandidateProfileResponse,
     ResumeParseResponse,
     ResumeAnalysisResponse,
+    ATSScoreRequest,
+    ATSScoreResponse,
 )
 
 from app.modules.candidate.service import CandidateService
@@ -89,4 +91,31 @@ async def analyze_resume(
     return await CandidateService.analyze_resume(
         db,
         current_user,
+    )
+
+@router.get(
+    "/resume/analysis",
+    response_model=ResumeAnalysisResponse
+)
+async def get_resume_analysis(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    return await CandidateService.get_resume_analysis(
+        db,
+        current_user
+    )
+@router.post(
+    "/resume/score",
+    response_model=ATSScoreResponse,
+)
+async def calculate_resume_score(
+    score_data: ATSScoreRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    return await CandidateService.calculate_resume_score(
+        db=db,
+        current_user=current_user,
+        job_description=score_data.job_description,
     )

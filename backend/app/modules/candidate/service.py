@@ -9,7 +9,9 @@ from app.modules.candidate.models import CandidateProfile
 from app.modules.candidate.repository import CandidateRepository
 from app.modules.candidate.schemas import CandidateProfileCreate
 from app.modules.candidate.skill_extractor import extract_skills
-
+from app.modules.candidate.ats_calculator import (
+    calculate_ats_score,
+)
 class CandidateService:
 
     @staticmethod
@@ -224,8 +226,92 @@ class CandidateService:
 
         skills = extract_skills(extracted_text)
 
+        return await CandidateRepository.save_resume_analysis(
+            db=db,
+            candidate_profile_id=profile.id,
+            resume_path=profile.resume_path,
+            extracted_text=extracted_text,
+            skills=skills
+        )
+    
+    @staticmethod
+    async def get_resume_analysis(
+        db: AsyncSession,
+        current_user: User
+    ):
+        profile = await CandidateRepository.get_profile_by_user_id(
+            db,
+            current_user.id
+        )
+
+        if not profile:
+            raise HTTPException(
+                status_code=404,
+                detail="Candidate profile not found"
+            )
+
+        analysis = await CandidateRepository.get_resume_analysis(
+            db,
+            profile.id
+        )
+
+        if not analysis:
+            raise HTTPException(
+                status_code=404,
+                detail="Resume analysis not found. Analyze your resume first."
+            )
+
+        return analysis
+    @staticmethod
+    async def calculate_resume_score(
+        db: AsyncSession,
+        current_user: User,
+        job_description: str,
+    ):
+        profile = await CandidateRepository.get_profile_by_user_id(
+            db,
+            current_user.id,
+        )
+
+        if not profile:
+            raise HTTPException(
+                status_code=404,
+                detail="Candidate profile not found",
+            )
+
+        analysis = await CandidateRepository.get_resume_analysis(
+            db,
+            profile.id,
+        )
+
+        if not analysis:
+            raise HTTPException(
+                status_code=404,
+                detail=(
+                    "Resume analysis not found. "
+                    "Analyze your resume first."
+                ),
+            )
+
+        job_skills = extract_skills(job_description)
+        resume_skills = analysis.skills or []
+
+        if not job_skills:
+            raise HTTPException(
+                status_code=422,
+                detail=(
+                    "No recognized technical skills were "
+                    "found in the job description."
+                ),
+            )
+
+        score_result = calculate_ats_score(
+            resume_skills=resume_skills,
+            job_skills=job_skills,
+        )
+
         return {
-            "resume_path": profile.resume_path,
-            "skills": skills,
-            "total_skills_found": len(skills)
+            **score_result,
+            "resume_skills": sorted(resume_skills),
+            "job_skills": sorted(job_skills),
         }
