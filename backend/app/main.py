@@ -5,8 +5,8 @@ from fastapi import FastAPI
 
 from app.core.config import settings
 from app.database.init_db import init_db
-
-
+from app.modules.recruiter.router import router as recruiter_router
+from app.modules.jobs.router import router as jobs_router
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await init_db()
@@ -21,7 +21,8 @@ app = FastAPI(
 )
 app.include_router(auth_router)
 app.include_router(candidate_router)
-
+app.include_router(recruiter_router)
+app.include_router(jobs_router)
 @app.get("/")
 def root():
     return {

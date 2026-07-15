@@ -31,7 +31,8 @@ class AuthService:
         new_user = User(
             full_name=user_data.full_name,
             email=user_data.email,
-            password=hash_password(user_data.password)
+            password=hash_password(user_data.password),
+            role=user_data.role
         )
 
         return await AuthRepository.create_user(
