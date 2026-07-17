@@ -21,7 +21,21 @@ class CandidateRepository:
         await db.commit()
         await db.refresh(profile)
         return profile
-    
+
+    @staticmethod
+    async def update_profile(
+        db: AsyncSession,
+        profile: CandidateProfile,
+        update_data: dict
+    ):
+        for key, value in update_data.items():
+            setattr(profile, key, value)
+
+        await db.commit()
+        await db.refresh(profile)
+
+        return profile
+        
     @staticmethod
     async def update_resume_path(
         db: AsyncSession,

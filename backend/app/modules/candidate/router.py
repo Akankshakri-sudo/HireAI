@@ -14,6 +14,7 @@ from app.modules.candidate.schemas import (
     ATSScoreRequest,
     ATSScoreResponse,
 )
+from app.modules.jobs.schemas import JobMatchResponse
 
 from app.modules.candidate.service import CandidateService
 
@@ -51,6 +52,21 @@ async def get_profile(
 ):
     return await CandidateService.get_profile(
         db,
+        current_user
+    )
+
+@router.put(
+    "/profile",
+    response_model=CandidateProfileResponse
+)
+async def update_profile(
+    profile_data: CandidateProfileCreate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    return await CandidateService.update_profile(
+        db,
+        profile_data,
         current_user
     )
     
@@ -118,4 +134,17 @@ async def calculate_resume_score(
         db=db,
         current_user=current_user,
         job_description=score_data.job_description,
+    )
+
+@router.get(
+    "/matched-jobs",
+    response_model=list[JobMatchResponse],
+)
+async def get_matched_jobs(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    return await CandidateService.get_matched_jobs(
+        db=db,
+        current_user=current_user,
     )

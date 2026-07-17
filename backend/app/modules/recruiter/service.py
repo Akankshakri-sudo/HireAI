@@ -83,3 +83,94 @@ class RecruiterService:
             db,
             profile,
         )
+
+    @staticmethod
+    async def get_profile(
+        db: AsyncSession,
+        current_user: User,
+    ):
+        profile = await RecruiterRepository.get_profile_by_user_id(
+            db,
+            current_user.id,
+        )
+
+        if not profile:
+            raise HTTPException(
+                status_code=404,
+                detail="Recruiter profile not found",
+            )
+
+        company = await RecruiterRepository.get_company_by_id(
+            db,
+            profile.company_id,
+        )
+
+        return {
+            "id": profile.id,
+            "user_id": profile.user_id,
+            "company_id": profile.company_id,
+            "designation": profile.designation,
+            "phone": profile.phone,
+            "company": company,
+        }
+
+    @staticmethod
+    async def update_profile(
+        db: AsyncSession,
+        profile_data: RecruiterProfileCreate,
+        current_user: User,
+    ):
+        profile = await RecruiterRepository.get_profile_by_user_id(
+            db,
+            current_user.id,
+        )
+
+        if not profile:
+            raise HTTPException(
+                status_code=404,
+                detail="Recruiter profile not found",
+            )
+
+        company = await RecruiterRepository.get_company_by_id(
+            db,
+            profile_data.company_id,
+        )
+
+        if not company:
+            raise HTTPException(
+                status_code=404,
+                detail="Company not found",
+            )
+
+        update_data = profile_data.model_dump(exclude_unset=True)
+        return await RecruiterRepository.update_profile(
+            db,
+            profile,
+            update_data,
+        )
+
+    @staticmethod
+    async def update_company(
+        db: AsyncSession,
+        company_id: int,
+        company_data: CompanyCreate,
+    ):
+        company = await RecruiterRepository.get_company_by_id(db, company_id)
+        if not company:
+            raise HTTPException(
+                status_code=404,
+                detail="Company not found",
+            )
+
+        update_data = company_data.model_dump(exclude_unset=True)
+        return await RecruiterRepository.update_company(
+            db,
+            company,
+            update_data,
+        )
+
+    @staticmethod
+    async def get_companies(
+        db: AsyncSession,
+    ):
+        return await RecruiterRepository.get_companies(db)

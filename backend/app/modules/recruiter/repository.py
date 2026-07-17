@@ -60,3 +60,34 @@ class RecruiterRepository:
         await db.commit()
         await db.refresh(profile)
         return profile
+
+    @staticmethod
+    async def update_profile(
+        db: AsyncSession,
+        profile: RecruiterProfile,
+        update_data: dict,
+    ):
+        for key, value in update_data.items():
+            setattr(profile, key, value)
+        await db.commit()
+        await db.refresh(profile)
+        return profile
+
+    @staticmethod
+    async def update_company(
+        db: AsyncSession,
+        company: Company,
+        update_data: dict,
+    ):
+        for key, value in update_data.items():
+            setattr(company, key, value)
+        await db.commit()
+        await db.refresh(company)
+        return company
+
+    @staticmethod
+    async def get_companies(
+        db: AsyncSession,
+    ):
+        result = await db.execute(select(Company).order_by(Company.name))
+        return result.scalars().all()

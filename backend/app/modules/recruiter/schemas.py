@@ -30,3 +30,15 @@ class RecruiterProfileResponse(RecruiterProfileCreate):
     model_config = {
         "from_attributes": True
     }
+
+class RecruiterProfileDetailResponse(BaseModel):
+    id: int
+    user_id: int
+    company_id: int
+    designation: str | None = None
+    phone: str | None = None
+    company: CompanyResponse | None = None
+
+    model_config = {
+        "from_attributes": True
+    }

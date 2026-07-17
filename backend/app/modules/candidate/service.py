@@ -65,6 +65,30 @@ class CandidateService:
         return profile
 
     @staticmethod
+    async def update_profile(
+        db: AsyncSession,
+        profile_data: CandidateProfileCreate,
+        current_user: User
+    ):
+        profile = await CandidateRepository.get_profile_by_user_id(
+            db,
+            current_user.id
+        )
+
+        if not profile:
+            raise HTTPException(
+                status_code=404,
+                detail="Candidate profile not found"
+            )
+
+        update_data = profile_data.model_dump(exclude_unset=True)
+        return await CandidateRepository.update_profile(
+            db,
+            profile,
+            update_data
+        )
+
+    @staticmethod
     async def upload_resume(
         db: AsyncSession,
         current_user: User,
@@ -315,3 +339,60 @@ class CandidateService:
             "resume_skills": sorted(resume_skills),
             "job_skills": sorted(job_skills),
         }
+
+    @staticmethod
+    async def get_matched_jobs(
+        db: AsyncSession,
+        current_user: User,
+    ):
+        profile = await CandidateRepository.get_profile_by_user_id(
+            db,
+            current_user.id,
+        )
+
+        if not profile:
+            raise HTTPException(
+                status_code=404,
+                detail="Candidate profile not found",
+            )
+
+        resume_analysis = await CandidateRepository.get_resume_analysis(
+            db,
+            profile.id,
+        )
+
+        # Fetch all active jobs
+        from app.modules.jobs.repository import JobRepository
+        jobs = await JobRepository.get_active_jobs(db)
+
+        matched_jobs = []
+        resume_skills = resume_analysis.skills if resume_analysis else []
+
+        for job in jobs:
+            job_skills = job.required_skills or []
+            if resume_analysis and job_skills:
+                score_result = calculate_ats_score(
+                    resume_skills=resume_skills,
+                    job_skills=job_skills,
+                )
+                score = score_result["ats_score"]
+                matched = score_result["matched_skills"]
+                missing = score_result["missing_skills"]
+            else:
+                score = 0.0
+                matched = []
+                missing = job_skills
+
+            matched_jobs.append({
+                "job_id": job.id,
+                "job_title": job.title,
+                "match_score": score,
+                "matched_skills": matched,
+                "missing_skills": missing,
+                "resume_skills": sorted(resume_skills),
+                "job_skills": sorted(job_skills),
+            })
+
+        # Sort jobs by match_score descending
+        matched_jobs.sort(key=lambda x: x["match_score"], reverse=True)
+        return matched_jobs
