@@ -9,8 +9,13 @@ class CompanyCreate(BaseModel):
     description: str | None = None
 
 
-class CompanyResponse(CompanyCreate):
+class CompanyResponse(BaseModel):
     id: int
+    name: str
+    website: str | None = None
+    industry: str | None = None
+    location: str | None = None
+    description: str | None = None
 
     model_config = {
         "from_attributes": True
@@ -30,6 +35,7 @@ class RecruiterProfileResponse(RecruiterProfileCreate):
     model_config = {
         "from_attributes": True
     }
+
 
 class RecruiterProfileDetailResponse(BaseModel):
     id: int

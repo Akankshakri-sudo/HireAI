@@ -1,23 +1,39 @@
+from __future__ import annotations
+
 from datetime import date, datetime
+from typing import TYPE_CHECKING
 
 from sqlalchemy import (
     Boolean,
+    CheckConstraint,
     Date,
     DateTime,
     ForeignKey,
+    Index,
     Integer,
     String,
     Text,
     func,
 )
 from sqlalchemy.dialects.postgresql import JSONB
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database.base import Base
+
+if TYPE_CHECKING:
+    from app.modules.applications.models import Application
+    from app.modules.recruiter.models import Company, Recruiter
 
 
 class Job(Base):
     __tablename__ = "jobs"
+    __table_args__ = (
+        CheckConstraint(
+            "salary_min IS NULL OR salary_max IS NULL OR salary_max >= salary_min",
+            name="ck_jobs_salary_range",
+        ),
+        Index("ix_jobs_is_active_deadline", "is_active", "deadline"),
+    )
 
     id: Mapped[int] = mapped_column(
         Integer,
@@ -27,7 +43,7 @@ class Job(Base):
 
     recruiter_id: Mapped[int] = mapped_column(
         ForeignKey(
-            "recruiter_profiles.id",
+            "recruiters.id",
             ondelete="CASCADE",
         ),
         nullable=False,
@@ -66,7 +82,7 @@ class Job(Base):
         default="full-time",
     )
 
-    required_skills: Mapped[list[str]] = mapped_column(
+    skills_required: Mapped[list[str]] = mapped_column(
         JSONB,
         nullable=False,
         default=list,
@@ -88,7 +104,7 @@ class Job(Base):
         nullable=True,
     )
 
-    application_deadline: Mapped[date | None] = mapped_column(
+    deadline: Mapped[date | None] = mapped_column(
         Date,
         nullable=True,
     )
@@ -97,6 +113,7 @@ class Job(Base):
         Boolean,
         nullable=False,
         default=True,
+        index=True,
     )
 
     created_at: Mapped[datetime] = mapped_column(
@@ -111,3 +128,23 @@ class Job(Base):
         onupdate=func.now(),
         nullable=False,
     )
+
+    recruiter: Mapped[Recruiter] = relationship(back_populates="jobs")
+
+    company: Mapped[Company] = relationship(back_populates="jobs")
+
+    applications: Mapped[list[Application]] = relationship(
+        back_populates="job",
+    )
+
+    @property
+    def required_skills(self) -> list[str]:
+        return self.skills_required
+
+    @property
+    def application_deadline(self) -> date | None:
+        return self.deadline
+
+    @property
+    def company_name(self) -> str | None:
+        return self.company.company_name if self.company else None

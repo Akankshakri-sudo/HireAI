@@ -3,7 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.recruiter.models import (
     Company,
-    RecruiterProfile,
+    Recruiter,
 )
 
 
@@ -15,7 +15,7 @@ class RecruiterRepository:
         name: str,
     ):
         result = await db.execute(
-            select(Company).where(Company.name == name)
+            select(Company).where(Company.company_name == name)
         )
         return result.scalar_one_or_none()
 
@@ -45,8 +45,8 @@ class RecruiterRepository:
         user_id: int,
     ):
         result = await db.execute(
-            select(RecruiterProfile).where(
-                RecruiterProfile.user_id == user_id
+            select(Recruiter).where(
+                Recruiter.user_id == user_id
             )
         )
         return result.scalar_one_or_none()
@@ -54,7 +54,7 @@ class RecruiterRepository:
     @staticmethod
     async def create_profile(
         db: AsyncSession,
-        profile: RecruiterProfile,
+        profile: Recruiter,
     ):
         db.add(profile)
         await db.commit()
@@ -64,7 +64,7 @@ class RecruiterRepository:
     @staticmethod
     async def update_profile(
         db: AsyncSession,
-        profile: RecruiterProfile,
+        profile: Recruiter,
         update_data: dict,
     ):
         for key, value in update_data.items():
@@ -79,7 +79,11 @@ class RecruiterRepository:
         company: Company,
         update_data: dict,
     ):
-        for key, value in update_data.items():
+        mapped_data = dict(update_data)
+        if "name" in mapped_data:
+            mapped_data["company_name"] = mapped_data.pop("name")
+
+        for key, value in mapped_data.items():
             setattr(company, key, value)
         await db.commit()
         await db.refresh(company)
@@ -89,5 +93,7 @@ class RecruiterRepository:
     async def get_companies(
         db: AsyncSession,
     ):
-        result = await db.execute(select(Company).order_by(Company.name))
+        result = await db.execute(
+            select(Company).order_by(Company.company_name)
+        )
         return result.scalars().all()

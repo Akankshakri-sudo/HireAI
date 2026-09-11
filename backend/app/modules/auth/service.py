@@ -8,7 +8,6 @@ from app.modules.auth.repository import AuthRepository
 from app.modules.auth.schemas import UserRegister
 
 
-
 class AuthService:
 
     @staticmethod
@@ -29,9 +28,9 @@ class AuthService:
             )
 
         new_user = User(
-            full_name=user_data.full_name,
+            name=user_data.full_name,
             email=user_data.email,
-            password=hash_password(user_data.password),
+            password_hash=hash_password(user_data.password),
             role=user_data.role
         )
 
@@ -39,6 +38,7 @@ class AuthService:
             db,
             new_user
         )
+
     @staticmethod
     async def login(
         db: AsyncSession,
@@ -59,7 +59,7 @@ class AuthService:
 
         if not verify_password(
             password,
-            user.password
+            user.password_hash
         ):
             raise HTTPException(
                 status_code=401,

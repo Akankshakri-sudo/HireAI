@@ -1,473 +1,482 @@
-import React, { useState, useEffect } from "react";
-import { useNavigate, Link } from "react-router-dom";
-import { candidateAPI, applicationsAPI } from "../services/api";
-import {
-  Upload,
-  FileText,
-  Briefcase,
-  Settings,
-  Percent,
-  Search,
-  CheckCircle,
-  FileUp,
-  MapPin,
-  Clock,
-  Sparkles,
-} from "lucide-react";
+import React, { useState, useEffect, useCallback } from 'react';
+import { useSearchParams, useNavigate } from 'react-router-dom';
+import { 
+  Upload, FileText, Briefcase, Sparkles, FileUp, 
+  MapPin, Clock, CheckCircle, Search, ClipboardList,
+  Calendar, Video, ExternalLink, AlertCircle
+} from 'lucide-react';
+import Navbar from '../components/Navbar';
+import { useToast } from '../components/Toast';
+import SearchFilters from '../components/SearchFilters';
+import ATSRadial from '../components/ATSRadial';
+import StatusTimeline from '../components/StatusTimeline';
+import JobDetailModal from '../components/JobDetailModal';
+import EmptyState from '../components/EmptyState';
+import { candidateAPI, applicationsAPI, interviewsAPI } from '../services/api';
 
 export default function CandidateDashboard() {
-  const [profile, setProfile] = useState(null);
-  const [resumeAnalysis, setResumeAnalysis] = useState(null);
-  const [matchedJobs, setMatchedJobs] = useState([]);
-  const [myApplications, setMyApplications] = useState([]);
-  const [selectedJob, setSelectedJob] = useState(null);
-
-  const [uploading, setUploading] = useState(false);
-  const [analyzing, setAnalyzing] = useState(false);
-  const [applying, setApplying] = useState(false);
-
-  const [error, setError] = useState("");
-  const [message, setMessage] = useState("");
-  const [fetching, setFetching] = useState(true);
-
+  const { showToast } = useToast();
+  const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
-  const user = JSON.parse(localStorage.getItem("user") || "{}");
-
-  const loadDashboardData = async () => {
-    try {
-      // 1. Get candidate profile
-      const prof = await candidateAPI.getProfile();
-      setProfile(prof);
-
-      // 2. Get resume analysis details (if analyzed)
-      try {
-        const analysis = await candidateAPI.getResumeAnalysis();
-        setResumeAnalysis(analysis);
-      } catch (err) {
-        if (err.response?.status !== 404) console.error(err);
-      }
-
-      // 3. Get matched jobs list
-      const jobs = await candidateAPI.getMatchedJobs();
-      setMatchedJobs(jobs);
-
-      // 4. Get candidate applications
-      const apps = await applicationsAPI.getMyApplications();
-      setMyApplications(apps);
-    } catch (err) {
-      console.error(err);
-      if (err.response?.status === 404 && !profile) {
-        // Redirect to profile setup if candidate profile is completely missing
-        navigate("/candidate/profile");
-      } else {
-        setError("Failed to load dashboard data. Please try refreshing.");
-      }
-    } finally {
-      setFetching(false);
-    }
-  };
+  
+  // State
+  const [profile, setProfile] = useState(null);
+  const [matchedJobs, setMatchedJobs] = useState([]);
+  const [applications, setApplications] = useState([]);
+  const [interviews, setInterviews] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isUploading, setIsUploading] = useState(false);
+  const [activeTab, setActiveTab] = useState(searchParams.get('tab') || 'matches');
+  const [selectedJob, setSelectedJob] = useState(null);
+  
+  // Filtering state
+  const [searchQuery, setSearchQuery] = useState('');
+  const [filters, setFilters] = useState({});
 
   useEffect(() => {
-    loadDashboardData();
-  }, []);
+    const tabParam = searchParams.get('tab');
+    if (tabParam && ['matches', 'applications', 'interviews'].includes(tabParam)) {
+      setActiveTab(tabParam);
+    }
+  }, [searchParams]);
 
-  const handleFileUpload = async (e) => {
-    const file = e.target.files[0];
+  const handleTabChange = (tab) => {
+    setActiveTab(tab);
+    setSearchParams({ tab });
+  };
+
+  const fetchData = useCallback(async () => {
+    try {
+      setIsLoading(true);
+      const [profileRes, jobsRes, appsRes, interviewsRes] = await Promise.all([
+        candidateAPI.getProfile().catch(() => null),
+        candidateAPI.getMatchedJobs().catch(() => []),
+        applicationsAPI.getMyApplications().catch(() => []),
+        interviewsAPI.getCandidateInterviews().catch(() => []),
+      ]);
+      
+      setProfile(profileRes);
+      setMatchedJobs(Array.isArray(jobsRes) ? jobsRes : []);
+      setApplications(Array.isArray(appsRes) ? appsRes : []);
+      setInterviews(Array.isArray(interviewsRes) ? interviewsRes : []);
+    } catch (err) {
+      showToast('Failed to load dashboard data. Please try again.', 'error');
+    } finally {
+      setIsLoading(false);
+    }
+  }, [showToast]);
+
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
+
+  const handleFileUpload = async (event) => {
+    const file = event.target.files?.[0];
     if (!file) return;
 
-    if (file.type !== "application/pdf") {
-      setError("Please upload a PDF file only.");
+    if (file.type !== 'application/pdf') {
+      showToast('Please upload a PDF file.', 'error');
       return;
     }
 
-    setUploading(true);
-    setError("");
-    setMessage("");
-
     try {
-      setMessage("Uploading resume PDF...");
+      setIsUploading(true);
+      showToast('Analyzing your resume...', 'info');
+      
       await candidateAPI.uploadResume(file);
-
-      setMessage("AI is extracting skills and parsing details...");
-      setAnalyzing(true);
-      await candidateAPI.analyzeResume();
-
-      setMessage("Analysis complete! Reloading dashboard...");
-      await loadDashboardData();
+      const updatedProfile = await candidateAPI.getProfile();
+      setProfile(updatedProfile);
+      
+      showToast('Resume analyzed successfully!', 'success');
+      
+      // Refresh matched jobs after new resume upload
+      const jobsRes = await candidateAPI.getMatchedJobs();
+      setMatchedJobs(Array.isArray(jobsRes) ? jobsRes : []);
+      
     } catch (err) {
-      console.error(err);
-      setError(
-        err.response?.data?.detail || "Failed to process resume. Please ensure it is a valid PDF."
-      );
+      showToast(err.response?.data?.detail || 'Failed to upload resume', 'error');
     } finally {
-      setUploading(false);
-      setAnalyzing(false);
+      setIsUploading(false);
     }
   };
 
   const handleApply = async (jobId) => {
-    if (!resumeAnalysis) {
-      setError("Please upload and analyze your resume before applying.");
-      return;
-    }
-
-    setApplying(true);
-    setError("");
-    setMessage("");
-
     try {
       await applicationsAPI.applyToJob(jobId);
-      setMessage("Applied successfully!");
-      // Reload applications and jobs list to update states
-      const apps = await applicationsAPI.getMyApplications();
-      setMyApplications(apps);
+      showToast('Application submitted successfully!', 'success');
+      
+      const appsRes = await applicationsAPI.getMyApplications();
+      setApplications(Array.isArray(appsRes) ? appsRes : []);
       setSelectedJob(null);
     } catch (err) {
-      console.error(err);
-      setError(err.response?.data?.detail || "Application failed. Please try again.");
-    } finally {
-      setApplying(false);
+      showToast(err.response?.data?.detail || 'Failed to submit application', 'error');
     }
   };
 
-  const isApplied = (jobId) => {
-    return myApplications.some((app) => app.job_id === jobId);
-  };
+  const isApplied = (jobId) => applications.some(app => app.job_id === jobId);
+  const getApplicationStatus = (jobId) => applications.find(app => app.job_id === jobId)?.status;
 
-  const getApplicationStatus = (jobId) => {
-    const app = myApplications.find((a) => a.job_id === jobId);
-    return app ? app.status : "";
-  };
+  // Filter matched jobs
+  const filteredJobs = matchedJobs.filter(match => {
+    const matchesSearch = !searchQuery || 
+      match.job_title?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      match.job_skills?.some(s => s.toLowerCase().includes(searchQuery.toLowerCase()));
+      
+    const matchesType = !filters.employment_type || 
+      match.employment_type === filters.employment_type;
+      
+    const matchesLocation = !filters.location || 
+      match.location?.toLowerCase().includes(filters.location.toLowerCase());
 
-  const handleLogout = () => {
-    localStorage.removeItem("token");
-    localStorage.removeItem("user");
-    navigate("/login");
-  };
+    return matchesSearch && matchesType && matchesLocation;
+  });
 
-  if (fetching) {
+  if (isLoading) {
     return (
-      <div className="min-h-screen bg-[#070b13] flex items-center justify-center text-gray-400">
-        <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-emerald-500 border-r-2" />
-        <span className="ml-3 font-medium">Assembling candidate panel...</span>
+      <div className="min-h-screen bg-[#070b13] flex items-center justify-center">
+        <div className="flex flex-col items-center space-y-4">
+          <div className="w-12 h-12 border-4 border-emerald-500/30 border-t-emerald-500 rounded-full animate-spin"></div>
+          <p className="text-gray-400 font-outfit">Loading your dashboard...</p>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-[#070b13] text-gray-100 selection:bg-emerald-500 selection:text-black">
-      {/* Header */}
-      <header className="border-b border-gray-800/80 bg-[#070b13]/85 backdrop-blur-md sticky top-0 z-40">
-        <div className="max-w-7xl mx-auto px-6 h-18 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-emerald-500 to-teal-400 flex items-center justify-center text-black font-extrabold shadow-lg shadow-emerald-500/20">
-              H
-            </div>
-            <span className="text-xl font-bold tracking-tight text-white">HireAI Portal</span>
-          </div>
-          <div className="flex items-center gap-6">
-            <span className="text-sm text-gray-400 hidden sm:inline">
-              Welcome, <span className="text-white font-semibold">{user.full_name}</span>
-            </span>
-            <Link
-              to="/candidate/profile"
-              className="text-gray-300 hover:text-white flex items-center gap-1.5 text-sm font-medium transition-colors"
-            >
-              <Settings size={16} /> Edit Profile
-            </Link>
-            <button
-              onClick={handleLogout}
-              className="text-gray-400 hover:text-rose-400 text-sm font-medium transition-colors cursor-pointer"
-            >
-              Sign Out
-            </button>
-          </div>
-        </div>
-      </header>
+    <div className="min-h-screen bg-[#070b13] text-white font-outfit selection:bg-emerald-500/30">
+      <Navbar />
+      
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+          
+          {/* Left Panel: Profile & Resume */}
+          <div className="lg:col-span-4 space-y-6">
+            <div className="bg-[#0f172a]/60 backdrop-blur-xl border border-gray-800/80 rounded-3xl p-6 sm:p-8 animate-[fadeIn_0.3s_ease-out]">
+              <div className="flex items-center space-x-4 mb-6">
+                <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-emerald-500/20 to-teal-500/20 flex items-center justify-center border border-emerald-500/30">
+                  <FileText className="w-8 h-8 text-emerald-400" />
+                </div>
+                <div>
+                  <h2 className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-white to-gray-400">
+                    Your Profile
+                  </h2>
+                  <p className="text-gray-400 text-sm">Resume & AI Insights</p>
+                </div>
+              </div>
 
-      {/* Main Grid */}
-      <main className="max-w-7xl mx-auto px-6 py-10 grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {/* Left Side - Resume Analysis & Status */}
-        <div className="lg:col-span-1 space-y-8">
-          {/* Status Display Info */}
-          <div className="bg-[#0f172a]/60 border border-gray-800/80 p-6 rounded-2xl backdrop-blur-md shadow-lg">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="font-bold text-white text-lg">My ATS Score</h3>
-              {resumeAnalysis && (
-                <span className="bg-emerald-500/10 border border-emerald-500/20 px-3 py-1 rounded-full text-emerald-400 text-xs font-semibold flex items-center gap-1">
-                  <Sparkles size={12} className="animate-pulse" /> Active Matcher
-                </span>
-              )}
-            </div>
-
-            {resumeAnalysis ? (
-              <div className="flex flex-col items-center py-6">
-                {/* Visual ATS Percentage Indicator */}
-                <div className="relative w-36 h-36 flex items-center justify-center mb-6">
-                  <div className="absolute inset-0 rounded-full border-4 border-gray-800" />
-                  <div className="absolute inset-0 rounded-full border-4 border-emerald-500 border-t-transparent border-l-transparent animate-spin-slow pointer-events-none" />
-                  <div className="flex flex-col items-center">
-                    <span className="text-4xl font-extrabold text-white">
-                      {resumeAnalysis.total_skills_found > 0 ? "ATS" : "0"}
-                    </span>
-                    <span className="text-emerald-400 text-xs font-bold mt-1">
-                      {resumeAnalysis.total_skills_found} Skills Found
-                    </span>
-                  </div>
+              <div className="space-y-6">
+                {/* Upload Section */}
+                <div className="relative group">
+                  <div className="absolute -inset-0.5 bg-gradient-to-r from-emerald-500 to-teal-500 rounded-2xl blur opacity-0 group-hover:opacity-20 transition duration-500"></div>
+                  <label className={`relative flex flex-col items-center justify-center w-full h-32 border-2 border-dashed ${isUploading ? 'border-emerald-500/50 bg-emerald-500/5' : 'border-gray-700 hover:border-emerald-500/50 hover:bg-[#0f172a]'} rounded-2xl cursor-pointer transition-all duration-300`}>
+                    <div className="flex flex-col items-center justify-center pt-5 pb-6">
+                      {isUploading ? (
+                        <div className="w-8 h-8 border-3 border-emerald-500/30 border-t-emerald-500 rounded-full animate-spin mb-3"></div>
+                      ) : (
+                        <FileUp className="w-8 h-8 text-gray-400 mb-3 group-hover:text-emerald-400 transition-colors" />
+                      )}
+                      <p className="text-sm text-gray-300">
+                        {isUploading ? 'Analyzing...' : <span className="font-semibold text-emerald-400">Upload new resume</span>}
+                      </p>
+                      <p className="text-xs text-gray-500 mt-1">PDF up to 5MB</p>
+                    </div>
+                    <input type="file" className="hidden" accept=".pdf" onChange={handleFileUpload} disabled={isUploading} />
+                  </label>
                 </div>
 
-                <div className="w-full space-y-4">
-                  <div className="border-t border-gray-800/85 pt-4">
-                    <span className="block text-gray-400 text-xs font-semibold uppercase tracking-wider mb-2">
-                      Extracted Skills
-                    </span>
-                    <div className="flex flex-wrap gap-1.5 max-h-40 overflow-y-auto pr-1">
-                      {resumeAnalysis.skills.map((skill, i) => (
-                        <span
-                          key={i}
-                          className="bg-gray-800/80 border border-gray-700/85 text-gray-300 text-xs font-medium px-2.5 py-1 rounded-lg"
-                        >
+                {/* Profile Stats / Info */}
+                {profile?.parsed_data?.skills?.length > 0 && (
+                  <div className="space-y-4 pt-4 border-t border-gray-800/80">
+                    <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Extracted Skills ({profile.parsed_data.skills.length})</h3>
+                    <div className="flex flex-wrap gap-1.5">
+                      {profile.parsed_data.skills.slice(0, 12).map((skill, i) => (
+                        <span key={i} className="px-2.5 py-1 bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 rounded-full text-xs font-medium">
                           {skill}
                         </span>
                       ))}
-                    </div>
-                  </div>
-
-                  <div className="border-t border-gray-800/85 pt-4 text-xs text-gray-400 flex items-center gap-1.5">
-                    <Clock size={14} /> Analyzed: {new Date(resumeAnalysis.analyzed_at).toLocaleDateString()}
-                  </div>
-                </div>
-              </div>
-            ) : (
-              <div className="flex flex-col items-center text-center py-8">
-                <div className="w-16 h-16 rounded-2xl bg-gray-800/50 border border-gray-700 text-gray-500 flex items-center justify-center mb-4">
-                  <FileText size={28} />
-                </div>
-                <h4 className="font-bold text-white mb-2">No Resume Found</h4>
-                <p className="text-gray-400 text-xs mb-6 max-w-[220px]">
-                  Upload a PDF version of your resume to parse technical skills and unlock job matching scores.
-                </p>
-              </div>
-            )}
-
-            {/* Resume Uploader Drop Zone */}
-            <div className="border border-dashed border-gray-800 hover:border-emerald-500/40 rounded-xl p-6 bg-[#070b13]/40 text-center transition-colors cursor-pointer relative overflow-hidden group">
-              <input
-                type="file"
-                accept=".pdf"
-                disabled={uploading}
-                onChange={handleFileUpload}
-                className="absolute inset-0 opacity-0 cursor-pointer disabled:cursor-not-allowed"
-              />
-              <div className="flex flex-col items-center justify-center gap-2">
-                <FileUp size={24} className="text-gray-500 group-hover:text-emerald-400 transition-colors" />
-                <span className="text-sm font-semibold text-gray-300">
-                  {uploading ? "Processing file..." : "Upload Resume PDF"}
-                </span>
-                <span className="text-gray-500 text-xs">PDF format, max 5MB</span>
-              </div>
-            </div>
-          </div>
-
-          {/* Feedback details */}
-          {(error || message) && (
-            <div className="p-4 rounded-xl text-sm border">
-              {error && (
-                <div className="text-rose-400 bg-rose-500/5 border-rose-500/10 flex items-center gap-2">
-                  <span>⚠️</span> {error}
-                </div>
-              )}
-              {message && (
-                <div className="text-emerald-400 bg-emerald-500/5 border-emerald-500/10 flex items-center gap-2">
-                  <div className="animate-spin rounded-full h-3.5 w-3.5 border-t border-emerald-400" />
-                  {message}
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-
-        {/* Right Side - Job Matches List */}
-        <div className="lg:col-span-2 space-y-6">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="font-extrabold text-white text-xl">Semantic Job Recommendations</h3>
-            <span className="text-gray-400 text-xs">{matchedJobs.length} matches found</span>
-          </div>
-
-          {matchedJobs.length > 0 ? (
-            <div className="space-y-4">
-              {matchedJobs.map((jobMatch) => (
-                <div
-                  key={jobMatch.job_id}
-                  onClick={() => setSelectedJob(jobMatch)}
-                  className="bg-[#0f172a]/60 border border-gray-800/80 hover:border-emerald-500/30 p-6 rounded-2xl backdrop-blur-md shadow-md cursor-pointer transition-all hover:-translate-y-0.5 group"
-                >
-                  <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-4">
-                    <div>
-                      <h4 className="font-bold text-lg text-white group-hover:text-emerald-400 transition-colors">
-                        {jobMatch.job_title}
-                      </h4>
-                      <p className="text-gray-400 text-xs font-semibold tracking-wide uppercase mt-1">
-                        Matching ATS Index
-                      </p>
-                    </div>
-
-                    {/* Match Badge */}
-                    <div className="flex items-center gap-3">
-                      <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gray-800/60 border border-gray-700/80">
-                        <span className="text-emerald-400 font-bold text-sm">
-                          {Math.round(jobMatch.match_score)}%
-                        </span>
-                        <span className="text-gray-500 text-xs">match</span>
-                      </div>
-
-                      {isApplied(jobMatch.job_id) && (
-                        <span className={`px-2.5 py-1 rounded-full text-xs font-semibold uppercase tracking-wider ${
-                          getApplicationStatus(jobMatch.job_id) === "shortlisted"
-                            ? "bg-emerald-500/10 border border-emerald-500/20 text-emerald-400"
-                            : getApplicationStatus(jobMatch.job_id) === "rejected"
-                            ? "bg-rose-500/10 border border-rose-500/20 text-rose-400"
-                            : "bg-teal-500/10 border border-teal-500/20 text-teal-400"
-                        }`}>
-                          {getApplicationStatus(jobMatch.job_id)}
+                      {profile.parsed_data.skills.length > 12 && (
+                        <span className="px-2.5 py-1 bg-gray-800/50 text-gray-400 rounded-full text-xs font-medium">
+                          +{profile.parsed_data.skills.length - 12} more
                         </span>
                       )}
                     </div>
                   </div>
+                )}
+              </div>
+            </div>
 
-                  {/* Skills lists */}
-                  <div className="flex flex-wrap gap-2 text-xs">
-                    {jobMatch.matched_skills.map((skill, index) => (
-                      <span
-                        key={index}
-                        className="bg-emerald-500/5 border border-emerald-500/10 text-emerald-400 px-2 py-0.5 rounded-lg"
-                      >
-                        ✓ {skill}
-                      </span>
-                    ))}
-                    {jobMatch.missing_skills.map((skill, index) => (
-                      <span
-                        key={index}
-                        className="bg-gray-800/40 border border-gray-800 text-gray-500 px-2 py-0.5 rounded-lg"
-                      >
-                        {skill}
-                      </span>
+            {/* Quick Links / Summary Card */}
+            <div className="bg-[#0f172a]/60 border border-gray-800/80 rounded-2xl p-6 space-y-4">
+              <h3 className="text-sm font-semibold text-gray-300 uppercase tracking-wider">Quick Activity</h3>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="p-3 bg-gray-800/40 rounded-xl border border-gray-700/50">
+                  <p className="text-xs text-gray-400">Applications</p>
+                  <p className="text-xl font-bold text-white mt-1">{applications.length}</p>
+                </div>
+                <div className="p-3 bg-gray-800/40 rounded-xl border border-gray-700/50">
+                  <p className="text-xs text-gray-400">Interviews</p>
+                  <p className="text-xl font-bold text-purple-400 mt-1">{interviews.length}</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Right Panel: Content Tabs */}
+          <div className="lg:col-span-8 space-y-6">
+            
+            {/* Tab Navigation */}
+            <div className="flex space-x-1 p-1 bg-[#0f172a]/60 border border-gray-800/80 rounded-2xl backdrop-blur-xl">
+              <button
+                onClick={() => handleTabChange('matches')}
+                className={`flex-1 flex items-center justify-center space-x-2 py-3 px-4 rounded-xl text-sm font-medium transition-all duration-300 ${
+                  activeTab === 'matches' 
+                    ? 'bg-gradient-to-r from-emerald-500/20 to-teal-500/20 text-emerald-400 border border-emerald-500/20 shadow-lg' 
+                    : 'text-gray-400 hover:text-gray-200 hover:bg-white/5'
+                }`}
+              >
+                <Sparkles className="w-4 h-4" />
+                <span>Job Matches ({matchedJobs.length})</span>
+              </button>
+              <button
+                onClick={() => handleTabChange('applications')}
+                className={`flex-1 flex items-center justify-center space-x-2 py-3 px-4 rounded-xl text-sm font-medium transition-all duration-300 ${
+                  activeTab === 'applications' 
+                    ? 'bg-gradient-to-r from-emerald-500/20 to-teal-500/20 text-emerald-400 border border-emerald-500/20 shadow-lg' 
+                    : 'text-gray-400 hover:text-gray-200 hover:bg-white/5'
+                }`}
+              >
+                <ClipboardList className="w-4 h-4" />
+                <span>My Applications ({applications.length})</span>
+              </button>
+              <button
+                onClick={() => handleTabChange('interviews')}
+                className={`flex-1 flex items-center justify-center space-x-2 py-3 px-4 rounded-xl text-sm font-medium transition-all duration-300 ${
+                  activeTab === 'interviews' 
+                    ? 'bg-gradient-to-r from-emerald-500/20 to-teal-500/20 text-emerald-400 border border-emerald-500/20 shadow-lg' 
+                    : 'text-gray-400 hover:text-gray-200 hover:bg-white/5'
+                }`}
+              >
+                <Calendar className="w-4 h-4" />
+                <span>Interviews ({interviews.length})</span>
+              </button>
+            </div>
+
+            {/* Matches Tab Content */}
+            {activeTab === 'matches' && (
+              <div className="animate-[fadeIn_0.3s_ease-out] space-y-6">
+                <SearchFilters 
+                  onSearch={(q) => setSearchQuery(q)}
+                  onFilterChange={(f) => setFilters(f)}
+                />
+
+                {filteredJobs.length === 0 ? (
+                  <EmptyState 
+                    icon={Search}
+                    title="No jobs found"
+                    description={searchQuery || Object.keys(filters).length > 0 
+                      ? "Try adjusting your search or filters to see more results."
+                      : "Upload your resume to get AI-powered job matches tailored to your skills."
+                    }
+                  />
+                ) : (
+                  <div className="grid gap-4">
+                    {filteredJobs.map((match, idx) => {
+                      const applied = isApplied(match.job_id);
+                      return (
+                        <div 
+                          key={match.job_id || idx}
+                          onClick={() => setSelectedJob(match)}
+                          className="bg-[#0f172a]/60 border border-gray-800/80 rounded-2xl p-6 hover:border-emerald-500/30 transition-all duration-300 cursor-pointer group"
+                        >
+                          <div className="flex items-start justify-between">
+                            <div className="space-y-3">
+                              <div>
+                                <h3 className="text-xl font-bold text-white group-hover:text-emerald-400 transition-colors">
+                                  {match.job_title}
+                                </h3>
+                                <p className="text-gray-400 flex items-center mt-1">
+                                  <Briefcase className="w-4 h-4 mr-2 opacity-70" />
+                                  {match.company_name || 'Company'}
+                                </p>
+                              </div>
+                              
+                              <div className="flex flex-wrap gap-3 text-sm text-gray-300">
+                                {match.location && (
+                                  <span className="flex items-center bg-gray-800/50 px-3 py-1 rounded-full">
+                                    <MapPin className="w-3.5 h-3.5 mr-1.5 text-emerald-400" />
+                                    {match.location}
+                                  </span>
+                                )}
+                                {match.employment_type && (
+                                  <span className="flex items-center bg-gray-800/50 px-3 py-1 rounded-full">
+                                    <Clock className="w-3.5 h-3.5 mr-1.5 text-emerald-400" />
+                                    {match.employment_type.replace('_', '-')}
+                                  </span>
+                                )}
+                              </div>
+
+                              {match.matched_skills?.length > 0 && (
+                                <div className="flex flex-wrap gap-1.5 mt-1">
+                                  {match.matched_skills.slice(0, 4).map((skill, i) => (
+                                    <span key={i} className="px-2 py-0.5 bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 rounded-full text-xs">
+                                      {skill}
+                                    </span>
+                                  ))}
+                                  {match.matched_skills.length > 4 && (
+                                    <span className="px-2 py-0.5 bg-gray-800/50 text-gray-400 rounded-full text-xs">
+                                      +{match.matched_skills.length - 4}
+                                    </span>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                            
+                            <div className="flex flex-col items-end space-y-3">
+                              <ATSRadial score={match.match_score} size="sm" />
+                              {applied && (
+                                <span className="flex items-center text-xs font-medium text-emerald-400 bg-emerald-500/10 px-2.5 py-1 rounded-full border border-emerald-500/20">
+                                  <CheckCircle className="w-3.5 h-3.5 mr-1" />
+                                  Applied
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Applications Tab Content */}
+            {activeTab === 'applications' && (
+              <div className="animate-[fadeIn_0.3s_ease-out] space-y-6">
+                {applications.length === 0 ? (
+                  <EmptyState 
+                    icon={ClipboardList}
+                    title="No applications yet"
+                    description="When you apply for jobs, your application tracking and status updates will appear here."
+                  />
+                ) : (
+                  <div className="grid gap-6">
+                    {applications.map((app, idx) => (
+                      <div key={app.application_id || idx} className="bg-[#0f172a]/60 border border-gray-800/80 rounded-2xl p-6">
+                        <div className="flex justify-between items-start mb-6">
+                          <div>
+                            <h3 className="text-xl font-bold text-white">{app.job_title}</h3>
+                            <p className="text-gray-400 mt-1">Applied on {new Date(app.created_at || Date.now()).toLocaleDateString()}</p>
+                          </div>
+                          <span className="px-3 py-1 bg-gray-800/80 border border-gray-700 text-gray-300 rounded-full text-sm font-medium capitalize">
+                            Status: {app.status}
+                          </span>
+                        </div>
+                        
+                        <div className="bg-[#070b13]/50 rounded-xl p-4 border border-gray-800/50">
+                          <StatusTimeline currentStatus={app.status} />
+                        </div>
+                      </div>
                     ))}
                   </div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="bg-[#0f172a]/40 border border-gray-800/80 rounded-2xl p-12 text-center text-gray-400">
-              <Briefcase size={36} className="mx-auto mb-4 text-gray-600 animate-pulse" />
-              <p className="font-semibold text-white">No jobs available right now</p>
-              <p className="text-xs text-gray-500 mt-1">Please check back later or modify your profile skills.</p>
-            </div>
-          )}
+                )}
+              </div>
+            )}
+
+            {/* Interviews Tab Content */}
+            {activeTab === 'interviews' && (
+              <div className="animate-[fadeIn_0.3s_ease-out] space-y-6">
+                {interviews.length === 0 ? (
+                  <EmptyState 
+                    icon={Calendar}
+                    title="No interviews scheduled yet"
+                    description="When recruiters shortlist your profile and set up an interview, it will appear here with the time and meeting details."
+                  />
+                ) : (
+                  <div className="grid gap-4">
+                    {interviews.map((iv) => {
+                      const isUpcoming = new Date(iv.scheduled_at) > new Date();
+                      return (
+                        <div key={iv.id} className="bg-[#0f172a]/60 border border-gray-800/80 rounded-2xl p-6 hover:border-purple-500/30 transition-all">
+                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                            <div>
+                              <div className="flex items-center gap-2 mb-1">
+                                <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-purple-500/20 text-purple-300 border border-purple-500/30">
+                                  {iv.round_name}
+                                </span>
+                                <span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold capitalize ${
+                                  iv.status === 'completed'
+                                    ? 'bg-emerald-500/20 text-emerald-300'
+                                    : iv.status === 'cancelled'
+                                    ? 'bg-rose-500/20 text-rose-300'
+                                    : 'bg-blue-500/20 text-blue-300'
+                                }`}>
+                                  {iv.status}
+                                </span>
+                              </div>
+
+                              <h3 className="text-xl font-bold text-white mt-2">{iv.job_title || 'Software Engineering Role'}</h3>
+                              <p className="text-gray-400 text-sm">{iv.company_name || 'Hiring Company'}</p>
+
+                              <div className="flex flex-wrap items-center gap-4 text-xs text-gray-300 mt-4">
+                                <span className="flex items-center gap-1.5">
+                                  <Calendar className="w-4 h-4 text-purple-400" />
+                                  {new Date(iv.scheduled_at).toLocaleDateString(undefined, {
+                                    weekday: 'short',
+                                    month: 'short',
+                                    day: 'numeric',
+                                    year: 'numeric',
+                                  })}
+                                </span>
+                                <span className="flex items-center gap-1.5">
+                                  <Clock className="w-4 h-4 text-purple-400" />
+                                  {new Date(iv.scheduled_at).toLocaleTimeString(undefined, {
+                                    hour: '2-digit',
+                                    minute: '2-digit',
+                                  })} ({iv.duration_minutes} mins)
+                                </span>
+                              </div>
+
+                              {iv.notes && (
+                                <p className="text-xs text-gray-400 mt-3 p-2 rounded-lg bg-gray-800/40 border border-gray-700/50">
+                                  <span className="font-semibold text-gray-300">Recruiter Notes:</span> {iv.notes}
+                                </p>
+                              )}
+                            </div>
+
+                            {iv.meeting_link && (
+                              <a
+                                href={iv.meeting_link.startsWith('http') ? iv.meeting_link : `https://${iv.meeting_link}`}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="flex items-center justify-center gap-2 px-5 py-2.5 bg-gradient-to-r from-purple-500 to-indigo-500 hover:from-purple-600 hover:to-indigo-600 text-white text-sm font-semibold rounded-xl shadow-lg shadow-purple-500/20 transition-all self-start sm:self-center"
+                              >
+                                <Video className="w-4 h-4" />
+                                <span>Join Interview</span>
+                                <ExternalLink className="w-3.5 h-3.5 opacity-70" />
+                              </a>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
+            
+          </div>
         </div>
       </main>
 
-      {/* Selected Job Drawer Modal */}
+      {/* Job Details Modal */}
       {selectedJob && (
-        <div className="fixed inset-0 bg-[#070b13]/80 backdrop-blur-sm z-50 flex justify-end">
-          <div className="w-full max-w-xl bg-[#0f172a] border-l border-gray-800 h-full p-8 overflow-y-auto flex flex-col justify-between shadow-2xl animate-slide-in">
-            <div>
-              {/* Header */}
-              <div className="flex justify-between items-start mb-6">
-                <div>
-                  <span className="text-gray-500 text-xs font-bold uppercase tracking-wider">Job Details</span>
-                  <h3 className="text-2xl font-extrabold text-white mt-1">{selectedJob.job_title}</h3>
-                </div>
-                <button
-                  onClick={() => setSelectedJob(null)}
-                  className="text-gray-400 hover:text-white p-1 rounded-lg hover:bg-gray-800 transition-colors"
-                >
-                  ✕
-                </button>
-              </div>
-
-              {/* Match Details */}
-              <div className="bg-[#070b13]/60 border border-gray-800/85 p-5 rounded-2xl mb-8 flex items-center justify-between">
-                <div>
-                  <h4 className="text-sm font-bold text-gray-300">AI Scoring Summary</h4>
-                  <p className="text-xs text-gray-400 mt-1">Matched using profile parsing index</p>
-                </div>
-                <div className="flex items-center gap-1 text-emerald-400 font-extrabold text-2xl">
-                  {Math.round(selectedJob.match_score)}%
-                </div>
-              </div>
-
-              {/* Skills Breakdown */}
-              <div className="space-y-6">
-                <div>
-                  <h4 className="text-xs font-semibold text-emerald-400 uppercase tracking-wider mb-3">
-                    Matched Skills ({selectedJob.matched_skills.length})
-                  </h4>
-                  <div className="flex flex-wrap gap-2">
-                    {selectedJob.matched_skills.length > 0 ? (
-                      selectedJob.matched_skills.map((skill, index) => (
-                        <span
-                          key={index}
-                          className="bg-emerald-500/5 border border-emerald-500/20 text-emerald-400 text-xs px-3 py-1 rounded-xl"
-                        >
-                          ✓ {skill}
-                        </span>
-                      ))
-                    ) : (
-                      <span className="text-gray-500 text-xs">No technical skill intersections found.</span>
-                    )}
-                  </div>
-                </div>
-
-                <div>
-                  <h4 className="text-xs font-semibold text-rose-400 uppercase tracking-wider mb-3">
-                    Missing Skills ({selectedJob.missing_skills.length})
-                  </h4>
-                  <div className="flex flex-wrap gap-2">
-                    {selectedJob.missing_skills.length > 0 ? (
-                      selectedJob.missing_skills.map((skill, index) => (
-                        <span
-                          key={index}
-                          className="bg-rose-500/5 border border-rose-500/20 text-rose-400 text-xs px-3 py-1 rounded-xl"
-                        >
-                          ✕ {skill}
-                        </span>
-                      ))
-                    ) : (
-                      <span className="text-emerald-400 text-xs font-bold">Awesome! You possess all required skills!</span>
-                    )}
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Actions */}
-            <div className="pt-6 border-t border-gray-800/80 flex gap-4 mt-8">
-              {isApplied(selectedJob.job_id) ? (
-                <button
-                  disabled
-                  className="flex-1 bg-gray-800 border border-gray-700 text-gray-500 font-bold py-4 rounded-xl transition-all flex items-center justify-center gap-2"
-                >
-                  <CheckCircle size={18} /> Already Applied
-                </button>
-              ) : (
-                <button
-                  onClick={() => handleApply(selectedJob.job_id)}
-                  disabled={applying}
-                  className="flex-1 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-black font-bold py-4 rounded-xl shadow-lg transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-[0.98]"
-                >
-                  {applying ? "Applying..." : "Apply Now"}
-                </button>
-              )}
-              <button
-                onClick={() => setSelectedJob(null)}
-                className="bg-gray-800 hover:bg-gray-700 border border-gray-700 hover:border-gray-600 text-gray-300 font-bold px-6 py-4 rounded-xl transition-all cursor-pointer"
-              >
-                Close
-              </button>
-            </div>
-          </div>
-        </div>
+        <JobDetailModal 
+          job={selectedJob} 
+          onClose={() => setSelectedJob(null)} 
+          onApply={() => handleApply(selectedJob.job_id || selectedJob.id)} 
+          isApplied={isApplied(selectedJob.job_id || selectedJob.id)} 
+          applicationStatus={getApplicationStatus(selectedJob.job_id || selectedJob.id)} 
+        />
       )}
     </div>
   );

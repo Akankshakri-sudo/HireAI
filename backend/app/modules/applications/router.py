@@ -13,6 +13,8 @@ router = APIRouter(
     tags=["Applications"],
 )
 
+# Static routes MUST come before parameterized routes to avoid conflicts
+
 @router.get(
     "/my",
     response_model=list[ApplicationResponse],
@@ -23,6 +25,33 @@ async def get_my_applications(
 ):
     return await ApplicationService.get_my_applications(
         db=db,
+        current_user=current_user,
+    )
+
+@router.get(
+    "/stats",
+)
+async def get_recruiter_stats(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_role("recruiter")),
+):
+    return await ApplicationService.get_recruiter_stats_service(
+        db=db,
+        user_id=current_user.id,
+    )
+
+@router.get(
+    "/jobs/{job_id}",
+    response_model=list[ApplicationDetailResponse],
+)
+async def get_job_applicants(
+    job_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_role("recruiter")),
+):
+    return await ApplicationService.get_job_applicants(
+        db=db,
+        job_id=job_id,
         current_user=current_user,
     )
 
@@ -37,21 +66,6 @@ async def apply_to_job(
     current_user: User = Depends(require_role("candidate")),
 ):
     return await ApplicationService.apply_to_job(
-        db=db,
-        job_id=job_id,
-        current_user=current_user,
-    )
-
-@router.get(
-    "/jobs/{job_id}",
-    response_model=list[ApplicationDetailResponse],
-)
-async def get_job_applicants(
-    job_id: int,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_role("recruiter")),
-):
-    return await ApplicationService.get_job_applicants(
         db=db,
         job_id=job_id,
         current_user=current_user,
@@ -88,4 +102,3 @@ async def generate_interview_questions(
         application_id=application_id,
         current_user=current_user,
     )
-    

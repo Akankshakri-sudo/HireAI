@@ -1,7 +1,10 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { candidateAPI } from "../services/api";
-import { ArrowLeft, User, Phone, BookOpen, Calendar, Settings, FileText, Check } from "lucide-react";
+import { User, Phone, BookOpen, Calendar, Settings, FileText, Check } from "lucide-react";
+import Navbar from "../components/Navbar";
+import { useToast } from "../components/Toast";
+import ProfileCompletion from "../components/ProfileCompletion";
 
 export default function CandidateProfile() {
   const [phone, setPhone] = useState("");
@@ -10,12 +13,13 @@ export default function CandidateProfile() {
   const [graduationYear, setGraduationYear] = useState("");
   const [skills, setSkills] = useState("");
   const [experience, setExperience] = useState("");
+  
   const [loading, setLoading] = useState(false);
   const [fetching, setFetching] = useState(true);
-  const [success, setSuccess] = useState(false);
-  const [error, setError] = useState("");
   const [hasProfile, setHasProfile] = useState(false);
+  
   const navigate = useNavigate();
+  const { showToast } = useToast();
 
   useEffect(() => {
     async function loadProfile() {
@@ -31,10 +35,9 @@ export default function CandidateProfile() {
           setHasProfile(true);
         }
       } catch (err) {
-        // 404 is expected if profile is not created yet
         if (err.response?.status !== 404) {
           console.error(err);
-          setError("Failed to load profile details.");
+          showToast("Failed to load profile details.", "error");
         }
       } finally {
         setFetching(false);
@@ -46,8 +49,6 @@ export default function CandidateProfile() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
-    setError("");
-    setSuccess(false);
 
     const profileData = {
       phone: phone || null,
@@ -65,24 +66,16 @@ export default function CandidateProfile() {
         await candidateAPI.createProfile(profileData);
         setHasProfile(true);
       }
-      setSuccess(true);
+      showToast("Profile updated successfully!", "success");
       setTimeout(() => {
         navigate("/candidate/dashboard");
       }, 1500);
     } catch (err) {
       console.error(err);
-      setError(
-        err.response?.data?.detail || "Failed to save profile. Please check input values."
-      );
+      showToast(err.response?.data?.detail || "Failed to save profile. Please check input values.", "error");
     } finally {
       setLoading(false);
     }
-  };
-
-  const handleLogout = () => {
-    localStorage.removeItem("token");
-    localStorage.removeItem("user");
-    navigate("/login");
   };
 
   if (fetching) {
@@ -94,33 +87,24 @@ export default function CandidateProfile() {
     );
   }
 
+  const completionSections = [
+    { label: "Phone", completed: !!phone },
+    { label: "Education", completed: !!(college && degree) },
+    { label: "Skills", completed: !!skills },
+    { label: "Experience", completed: !!experience },
+    { label: "Resume", completed: true },
+  ];
+
   return (
     <div className="min-h-screen bg-[#070b13] text-gray-100 selection:bg-emerald-500 selection:text-black">
-      {/* Header */}
-      <header className="border-b border-gray-800/80 bg-[#070b13]/85 backdrop-blur-md sticky top-0 z-40">
-        <div className="max-w-4xl mx-auto px-6 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <button
-              onClick={() => navigate("/candidate/dashboard")}
-              className="text-gray-400 hover:text-white p-1.5 rounded-lg hover:bg-gray-800/50 transition-colors"
-            >
-              <ArrowLeft size={18} />
-            </button>
-            <span className="font-bold text-lg text-white">Edit Candidate Profile</span>
-          </div>
-          <button
-            onClick={handleLogout}
-            className="text-gray-400 hover:text-rose-400 text-sm font-medium transition-colors cursor-pointer"
-          >
-            Sign Out
-          </button>
-        </div>
-      </header>
+      <Navbar />
 
-      {/* Main Content */}
       <main className="max-w-3xl mx-auto px-6 py-12">
+        <div className="mb-8">
+          <ProfileCompletion sections={completionSections} />
+        </div>
+
         <div className="bg-[#0f172a]/60 border border-gray-800/80 rounded-3xl p-8 backdrop-blur-md shadow-xl">
-          {/* Header Info */}
           <div className="mb-8 pb-6 border-b border-gray-800/80">
             <h2 className="text-2xl font-extrabold text-white">Professional Profile</h2>
             <p className="text-gray-400 text-sm mt-1">
@@ -128,25 +112,8 @@ export default function CandidateProfile() {
             </p>
           </div>
 
-          {/* Success Banner */}
-          {success && (
-            <div className="mb-6 bg-emerald-500/10 border border-emerald-500/20 p-4 rounded-xl flex items-center gap-3 text-emerald-400 text-sm">
-              <Check size={18} className="shrink-0" />
-              <span>Profile updated successfully! Redirecting to dashboard...</span>
-            </div>
-          )}
-
-          {/* Error Banner */}
-          {error && (
-            <div className="mb-6 bg-rose-500/10 border border-rose-500/20 p-4 rounded-xl flex items-center gap-3 text-rose-400 text-sm">
-              <span className="shrink-0">⚠️</span>
-              <span>{error}</span>
-            </div>
-          )}
-
           <form onSubmit={handleSubmit} className="space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {/* Phone */}
               <div>
                 <label className="block text-gray-300 text-xs font-semibold uppercase tracking-wider mb-2">
                   Phone Number
@@ -165,7 +132,6 @@ export default function CandidateProfile() {
                 </div>
               </div>
 
-              {/* College */}
               <div>
                 <label className="block text-gray-300 text-xs font-semibold uppercase tracking-wider mb-2">
                   College / University
@@ -184,7 +150,6 @@ export default function CandidateProfile() {
                 </div>
               </div>
 
-              {/* Degree */}
               <div>
                 <label className="block text-gray-300 text-xs font-semibold uppercase tracking-wider mb-2">
                   Degree / Program
@@ -203,7 +168,6 @@ export default function CandidateProfile() {
                 </div>
               </div>
 
-              {/* Graduation Year */}
               <div>
                 <label className="block text-gray-300 text-xs font-semibold uppercase tracking-wider mb-2">
                   Graduation Year
@@ -223,7 +187,6 @@ export default function CandidateProfile() {
               </div>
             </div>
 
-            {/* Technical Skills */}
             <div>
               <label className="block text-gray-300 text-xs font-semibold uppercase tracking-wider mb-2">
                 Technical Skills (Comma separated)
@@ -245,7 +208,6 @@ export default function CandidateProfile() {
               </p>
             </div>
 
-            {/* Experience */}
             <div>
               <label className="block text-gray-300 text-xs font-semibold uppercase tracking-wider mb-2">
                 Professional Experience Description
@@ -264,7 +226,6 @@ export default function CandidateProfile() {
               </div>
             </div>
 
-            {/* Submit */}
             <div className="flex gap-4 pt-4 border-t border-gray-800/80">
               <button
                 type="submit"

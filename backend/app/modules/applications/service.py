@@ -170,7 +170,7 @@ class ApplicationService:
         application = Application(
             candidate_profile_id=candidate_profile.id,
             job_id=job.id,
-            resume_analysis_id=resume_analysis.id,
+            resume_id=resume_analysis.resume_id,
             status="applied",
             match_score=round(score_result["ats_score"]),
         )
@@ -270,6 +270,32 @@ class ApplicationService:
         application.status = status.strip().lower()
         await db.commit()
         await db.refresh(application)
+
+        # Notify candidate
+        try:
+            from app.modules.notifications.models import Notification
+            from app.modules.notifications.repository import NotificationRepository
+            cand = await CandidateRepository.get_profile_by_id(db, application.candidate_profile_id)
+            if cand and cand.user_id:
+                status_titles = {
+                    "shortlisted": "You've Been Shortlisted! 🌟",
+                    "interview": "Interview Stage! 📅",
+                    "hired": "Congratulations! You're Hired! 🎉",
+                    "rejected": "Application Status Update",
+                    "reviewing": "Application Under Review",
+                }
+                title = status_titles.get(application.status, f"Application Status: {application.status.capitalize()}")
+                notif = Notification(
+                    user_id=cand.user_id,
+                    title=title,
+                    message=f"Your application for '{job.title}' has been updated to: {application.status.upper()}.",
+                    type="application_status",
+                    link="/candidate/dashboard?tab=applications",
+                )
+                await NotificationRepository.create(db, notif)
+        except Exception:
+            pass
+
         return application
 
     @staticmethod
@@ -303,6 +329,17 @@ class ApplicationService:
                 detail="Access denied: You do not own this job listing",
             )
             
+        # Check if already generated and saved in db
+        questions_record = await ApplicationRepository.get_interview_questions(db, application_id)
+        if questions_record:
+            return {
+                "application_id": questions_record.application_id,
+                "technical": questions_record.technical_questions,
+                "behavioral": questions_record.behavioral_questions,
+                "hr": questions_record.hr_questions,
+                "coding": questions_record.coding_questions,
+            }
+
         from app.modules.candidate.repository import CandidateRepository
         resume_analysis = await CandidateRepository.get_resume_analysis(
             db,
@@ -362,6 +399,17 @@ class ApplicationService:
             "Why should we hire you over other candidates for this job?",
         ]
         
+        # Save to database
+        from app.modules.applications.models import InterviewQuestions
+        questions_record = InterviewQuestions(
+            application_id=application_id,
+            technical_questions=tech_questions,
+            behavioral_questions=behavioral_questions,
+            hr_questions=hr_questions,
+            coding_questions=coding_questions
+        )
+        await ApplicationRepository.save_interview_questions(db, questions_record)
+
         return {
             "application_id": application.id,
             "technical": tech_questions,
@@ -369,3 +417,15 @@ class ApplicationService:
             "hr": hr_questions,
             "coding": coding_questions,
         }
+
+    @staticmethod
+    async def get_recruiter_stats_service(
+        db: AsyncSession,
+        user_id: int,
+    ):
+        from app.modules.recruiter.repository import RecruiterRepository
+        recruiter = await RecruiterRepository.get_profile_by_user_id(db, user_id)
+        if not recruiter:
+            raise HTTPException(status_code=404, detail="Recruiter profile not found")
+            
+        return await ApplicationRepository.get_recruiter_stats(db, user_id)

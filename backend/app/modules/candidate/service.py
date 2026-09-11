@@ -5,13 +5,15 @@ from fastapi import HTTPException, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.auth.models import User
-from app.modules.candidate.models import CandidateProfile
+from app.modules.candidate.models import Candidate, Resume
 from app.modules.candidate.repository import CandidateRepository
 from app.modules.candidate.schemas import CandidateProfileCreate
 from app.modules.candidate.skill_extractor import extract_skills
 from app.modules.candidate.ats_calculator import (
     calculate_ats_score,
 )
+
+
 class CandidateService:
 
     @staticmethod
@@ -31,14 +33,12 @@ class CandidateService:
                 detail="Candidate profile already exists"
             )
 
-        profile = CandidateProfile(
+        profile = Candidate(
             user_id=current_user.id,
             phone=profile_data.phone,
-            college=profile_data.college,
-            degree=profile_data.degree,
-            graduation_year=profile_data.graduation_year,
-            skills=profile_data.skills,
-            experience=profile_data.experience
+            education=profile_data.education,
+            experience=profile_data.experience,
+            location=profile_data.location,
         )
 
         return await CandidateRepository.create_profile(
@@ -137,11 +137,12 @@ class CandidateService:
         with open(file_path, "wb") as buffer:
             buffer.write(content)
 
-        return await CandidateRepository.update_resume_path(
-            db,
-            profile,
-            file_path
+        resume = Resume(
+            candidate_id=profile.id,
+            file_url=file_path,
         )
+        return await CandidateRepository.create_resume(db, resume)
+
     @staticmethod
     async def parse_resume(
         db: AsyncSession,
@@ -158,14 +159,15 @@ class CandidateService:
                 detail="Candidate profile not found"
             )
 
-        if not profile.resume_path:
+        latest_resume = await CandidateRepository.get_latest_resume(db, profile.id)
+        if not latest_resume:
             raise HTTPException(
                 status_code=400,
                 detail="Please upload a resume first"
             )
 
         file_extension = os.path.splitext(
-            profile.resume_path
+            latest_resume.file_url
         )[1].lower()
 
         if file_extension != ".pdf":
@@ -174,7 +176,7 @@ class CandidateService:
                 detail="Resume parsing currently supports PDF files only"
             )
 
-        if not os.path.exists(profile.resume_path):
+        if not os.path.exists(latest_resume.file_url):
             raise HTTPException(
                 status_code=404,
                 detail="Resume file not found on server"
@@ -182,7 +184,7 @@ class CandidateService:
 
         try:
             extracted_text = extract_text_from_pdf(
-                profile.resume_path
+                latest_resume.file_url
             )
         except Exception:
             raise HTTPException(
@@ -197,9 +199,10 @@ class CandidateService:
             )
 
         return {
-            "resume_path": profile.resume_path,
+            "resume_path": latest_resume.file_url,
             "extracted_text": extracted_text
         }
+
     @staticmethod
     async def analyze_resume(
         db: AsyncSession,
@@ -216,14 +219,15 @@ class CandidateService:
                 detail="Candidate profile not found"
             )
 
-        if not profile.resume_path:
+        latest_resume = await CandidateRepository.get_latest_resume(db, profile.id)
+        if not latest_resume:
             raise HTTPException(
                 status_code=400,
                 detail="Please upload a resume first"
             )
 
         file_extension = os.path.splitext(
-            profile.resume_path
+            latest_resume.file_url
         )[1].lower()
 
         if file_extension != ".pdf":
@@ -232,14 +236,14 @@ class CandidateService:
                 detail="Resume analysis currently supports PDF files only"
             )
 
-        if not os.path.exists(profile.resume_path):
+        if not os.path.exists(latest_resume.file_url):
             raise HTTPException(
                 status_code=404,
                 detail="Resume file not found on server"
             )
 
         extracted_text = extract_text_from_pdf(
-            profile.resume_path
+            latest_resume.file_url
         )
 
         if not extracted_text:
@@ -250,14 +254,22 @@ class CandidateService:
 
         skills = extract_skills(extracted_text)
 
+        ats_score = min(len(skills) * 10.0, 100.0)
+        education = "Extracted from PDF details"
+        experience = "Extracted from PDF details"
+        suggestions = "Consider adding more keywords matching modern SaaS stacks."
+
         return await CandidateRepository.save_resume_analysis(
             db=db,
-            candidate_profile_id=profile.id,
-            resume_path=profile.resume_path,
+            resume_id=latest_resume.id,
             extracted_text=extracted_text,
-            skills=skills
+            skills=skills,
+            ats_score=ats_score,
+            education=education,
+            experience=experience,
+            suggestions=suggestions,
         )
-    
+
     @staticmethod
     async def get_resume_analysis(
         db: AsyncSession,
@@ -286,6 +298,7 @@ class CandidateService:
             )
 
         return analysis
+
     @staticmethod
     async def calculate_resume_score(
         db: AsyncSession,
@@ -361,7 +374,6 @@ class CandidateService:
             profile.id,
         )
 
-        # Fetch all active jobs
         from app.modules.jobs.repository import JobRepository
         jobs = await JobRepository.get_active_jobs(db)
 
@@ -369,7 +381,7 @@ class CandidateService:
         resume_skills = resume_analysis.skills if resume_analysis else []
 
         for job in jobs:
-            job_skills = job.required_skills or []
+            job_skills = job.skills_required or []
             if resume_analysis and job_skills:
                 score_result = calculate_ats_score(
                     resume_skills=resume_skills,
@@ -386,6 +398,12 @@ class CandidateService:
             matched_jobs.append({
                 "job_id": job.id,
                 "job_title": job.title,
+                "company_name": job.company.company_name if job.company else None,
+                "location": job.location,
+                "employment_type": job.employment_type,
+                "description": job.description[:200] if job.description else None,
+                "salary_min": job.salary_min,
+                "salary_max": job.salary_max,
                 "match_score": score,
                 "matched_skills": matched,
                 "missing_skills": missing,
@@ -393,6 +411,5 @@ class CandidateService:
                 "job_skills": sorted(job_skills),
             })
 
-        # Sort jobs by match_score descending
         matched_jobs.sort(key=lambda x: x["match_score"], reverse=True)
         return matched_jobs

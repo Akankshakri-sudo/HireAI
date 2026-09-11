@@ -9,6 +9,7 @@ from app.modules.auth.models import User
 from app.modules.candidate.schemas import (
     CandidateProfileCreate,
     CandidateProfileResponse,
+    ResumeUploadResponse,
     ResumeParseResponse,
     ResumeAnalysisResponse,
     ATSScoreRequest,
@@ -72,7 +73,7 @@ async def update_profile(
     
 @router.post(
     "/resume",
-    response_model=CandidateProfileResponse
+    response_model=ResumeUploadResponse
 )
 async def upload_resume(
     file: UploadFile = File(...),

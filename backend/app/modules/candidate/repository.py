@@ -2,21 +2,30 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.candidate.models import (
-    CandidateProfile,
+    Candidate,
+    Resume,
     ResumeAnalysis,
 )
+
 
 class CandidateRepository:
 
     @staticmethod
     async def get_profile_by_user_id(db: AsyncSession, user_id: int):
         result = await db.execute(
-            select(CandidateProfile).where(CandidateProfile.user_id == user_id)
+            select(Candidate).where(Candidate.user_id == user_id)
         )
         return result.scalar_one_or_none()
 
     @staticmethod
-    async def create_profile(db: AsyncSession, profile: CandidateProfile):
+    async def get_profile_by_id(db: AsyncSession, candidate_id: int):
+        result = await db.execute(
+            select(Candidate).where(Candidate.id == candidate_id)
+        )
+        return result.scalar_one_or_none()
+
+    @staticmethod
+    async def create_profile(db: AsyncSession, profile: Candidate):
         db.add(profile)
         await db.commit()
         await db.refresh(profile)
@@ -25,8 +34,8 @@ class CandidateRepository:
     @staticmethod
     async def update_profile(
         db: AsyncSession,
-        profile: CandidateProfile,
-        update_data: dict
+        profile: Candidate,
+        update_data: dict,
     ):
         for key, value in update_data.items():
             setattr(profile, key, value)
@@ -35,62 +44,73 @@ class CandidateRepository:
         await db.refresh(profile)
 
         return profile
-        
-    @staticmethod
-    async def update_resume_path(
-        db: AsyncSession,
-        profile: CandidateProfile,
-        resume_path: str
-    ):
-        profile.resume_path = resume_path
 
-        await db.commit()
-        await db.refresh(profile)
-
-        return profile
     @staticmethod
     async def get_resume_analysis(
         db: AsyncSession,
-        candidate_profile_id: int,
+        candidate_id: int,
     ):
         result = await db.execute(
-            select(ResumeAnalysis).where(
-                ResumeAnalysis.candidate_profile_id
-                == candidate_profile_id
-            )
+            select(ResumeAnalysis)
+            .join(Resume, ResumeAnalysis.resume_id == Resume.id)
+            .where(Resume.candidate_id == candidate_id)
+            .order_by(Resume.uploaded_at.desc())
         )
-
-        return result.scalar_one_or_none()
+        return result.scalars().first()
 
     @staticmethod
     async def save_resume_analysis(
         db: AsyncSession,
-        candidate_profile_id: int,
-        resume_path: str,
+        resume_id: int,
         extracted_text: str,
         skills: list[str],
+        ats_score: float | None = None,
+        education: str | None = None,
+        experience: str | None = None,
+        suggestions: str | None = None,
     ):
-        analysis = await CandidateRepository.get_resume_analysis(
-            db,
-            candidate_profile_id,
+        result = await db.execute(
+            select(ResumeAnalysis).where(ResumeAnalysis.resume_id == resume_id)
         )
+        analysis = result.scalar_one_or_none()
 
         if analysis:
-            analysis.resume_path = resume_path
             analysis.extracted_text = extracted_text
             analysis.skills = skills
             analysis.total_skills_found = len(skills)
+            analysis.ats_score = ats_score
+            analysis.education = education
+            analysis.experience = experience
+            analysis.suggestions = suggestions
         else:
             analysis = ResumeAnalysis(
-                candidate_profile_id=candidate_profile_id,
-                resume_path=resume_path,
+                resume_id=resume_id,
                 extracted_text=extracted_text,
                 skills=skills,
                 total_skills_found=len(skills),
+                ats_score=ats_score,
+                education=education,
+                experience=experience,
+                suggestions=suggestions,
             )
             db.add(analysis)
 
         await db.commit()
         await db.refresh(analysis)
-
         return analysis
+
+    @staticmethod
+    async def create_resume(db: AsyncSession, resume: Resume):
+        db.add(resume)
+        await db.commit()
+        await db.refresh(resume)
+        return resume
+
+    @staticmethod
+    async def get_latest_resume(db: AsyncSession, candidate_id: int):
+        result = await db.execute(
+            select(Resume)
+            .where(Resume.candidate_id == candidate_id)
+            .order_by(Resume.uploaded_at.desc())
+        )
+        return result.scalars().first()

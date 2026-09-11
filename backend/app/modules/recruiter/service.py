@@ -4,7 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.modules.auth.models import User
 from app.modules.recruiter.models import (
     Company,
-    RecruiterProfile,
+    Recruiter,
 )
 from app.modules.recruiter.repository import RecruiterRepository
 from app.modules.recruiter.schemas import (
@@ -32,7 +32,7 @@ class RecruiterService:
             )
 
         company = Company(
-            name=company_data.name,
+            company_name=company_data.name,
             website=company_data.website,
             industry=company_data.industry,
             location=company_data.location,
@@ -72,7 +72,7 @@ class RecruiterService:
                 detail="Company not found",
             )
 
-        profile = RecruiterProfile(
+        profile = Recruiter(
             user_id=current_user.id,
             company_id=profile_data.company_id,
             designation=profile_data.designation,
