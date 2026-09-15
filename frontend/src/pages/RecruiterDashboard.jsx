@@ -46,8 +46,8 @@ const RecruiterDashboard = () => {
     try {
       // Assuming jobsAPI.getRecruiterJobs or similar fetches jobs for this recruiter
       const [jobsRes, statsRes] = await Promise.all([
-        jobsAPI.getJobs(), // Might need recruiter-specific endpoint if available, falling back to generic
-        applicationsAPI.getRecruiterStats()
+        jobsAPI.getRecruiterJobs().catch(() => jobsAPI.getJobs()),
+        applicationsAPI.getRecruiterStats().catch(() => ({}))
       ]);
       setJobs(Array.isArray(jobsRes) ? jobsRes : []);
       const s = statsRes || {};

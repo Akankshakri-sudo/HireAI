@@ -111,6 +111,7 @@ class JobRepository:
     ):
         result = await db.execute(
             select(Job)
+            .options(selectinload(Job.company))
             .where(Job.recruiter_id == recruiter_id)
             .order_by(Job.created_at.desc())
         )

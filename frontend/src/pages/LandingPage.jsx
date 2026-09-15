@@ -1,34 +1,12 @@
 import React from "react";
 import { Link } from "react-router-dom";
 import { Briefcase, FileText, Cpu, CheckCircle } from "lucide-react";
+import Navbar from "../components/Navbar";
 
 export default function LandingPage() {
   return (
     <div className="min-h-screen bg-[#070b13] text-gray-100 flex flex-col selection:bg-emerald-500 selection:text-black">
-      {/* Header */}
-      <header className="border-b border-gray-800/80 bg-[#070b13]/85 backdrop-blur-md sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto px-6 h-18 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-emerald-500 to-teal-400 flex items-center justify-center text-black font-extrabold shadow-lg shadow-emerald-500/20">
-              H
-            </div>
-            <span className="text-xl font-bold tracking-tight bg-gradient-to-r from-white to-gray-400 bg-clip-text text-transparent">
-              HireAI
-            </span>
-          </div>
-          <nav className="flex items-center gap-6">
-            <Link to="/login" className="text-gray-300 hover:text-white transition-colors font-medium">
-              Sign In
-            </Link>
-            <Link
-              to="/register"
-              className="bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-black font-semibold px-5 py-2.5 rounded-xl shadow-lg shadow-emerald-500/10 hover:shadow-emerald-500/20 hover:scale-[1.02] active:scale-[0.98] transition-all"
-            >
-              Get Started
-            </Link>
-          </nav>
-        </div>
-      </header>
+      <Navbar />
 
       {/* Hero Section */}
       <main className="flex-1 flex flex-col justify-center items-center text-center px-6 py-20 relative overflow-hidden">
