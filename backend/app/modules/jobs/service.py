@@ -128,49 +128,39 @@ class JobService:
                 detail="Job not found",
             )
 
-        candidate = (
-            await CandidateRepository.get_profile_by_user_id(
-                db,
-                current_user.id,
-            )
+        candidate = await CandidateRepository.get_profile_by_user_id(
+            db, current_user.id
         )
-
         if not candidate:
-            raise HTTPException(
-                status_code=404,
-                detail="Candidate profile not found",
-            )
+            candidate = Candidate(user_id=current_user.id)
+            candidate = await CandidateRepository.create_profile(db, candidate)
 
-        resume_analysis = (
-            await CandidateRepository.get_resume_analysis(
-                db,
-                candidate.id,
-            )
+        resume_analysis = await CandidateRepository.get_resume_analysis(
+            db, candidate.id
         )
 
-        if not resume_analysis:
-            raise HTTPException(
-                status_code=404,
-                detail=(
-                    "Resume analysis not found. "
-                    "Upload and analyze your resume first."
-                ),
-            )
-
-        resume_skills = resume_analysis.skills or []
+        resume_skills = resume_analysis.skills if resume_analysis else []
         job_skills = job.skills_required or []
 
-        score_result = calculate_ats_score(
-            resume_skills=resume_skills,
-            job_skills=job_skills,
-        )
+        if resume_analysis and job_skills:
+            score_result = calculate_ats_score(
+                resume_skills=resume_skills,
+                job_skills=job_skills,
+            )
+            score = score_result["ats_score"]
+            matched = score_result["matched_skills"]
+            missing = score_result["missing_skills"]
+        else:
+            score = 0.0
+            matched = []
+            missing = job_skills
 
         return {
             "job_id": job.id,
             "job_title": job.title,
-            "match_score": score_result["ats_score"],
-            "matched_skills": score_result["matched_skills"],
-            "missing_skills": score_result["missing_skills"],
+            "match_score": score,
+            "matched_skills": matched,
+            "missing_skills": missing,
             "resume_skills": sorted(resume_skills),
             "job_skills": sorted(job_skills),
         }
