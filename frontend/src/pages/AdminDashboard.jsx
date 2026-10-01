@@ -46,11 +46,12 @@ export default function AdminDashboard() {
     }
   }, [showToast]);
 
-  const fetchUsers = useCallback(async () => {
+  const fetchUsers = useCallback(async (roleOverride) => {
     try {
       const params = {};
       if (userSearch) params.search = userSearch;
-      if (userRoleFilter) params.role = userRoleFilter;
+      const role = roleOverride ?? userRoleFilter;
+      if (role) params.role = role;
       const data = await adminAPI.getUsers(params);
       setUsers(Array.isArray(data) ? data : []);
     } catch {
@@ -340,7 +341,7 @@ export default function AdminDashboard() {
                 value={userRoleFilter}
                 onChange={(e) => {
                   setUserRoleFilter(e.target.value);
-                  setTimeout(fetchUsers, 50);
+                  fetchUsers(e.target.value);
                 }}
                 className="px-4 py-2 bg-[#070b13] border border-gray-700 rounded-xl text-sm text-white focus:outline-none"
               >

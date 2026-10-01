@@ -129,8 +129,27 @@ async def test_full_platform_flow():
         # 3. RESUME UPLOAD, PARSING, AND ANALYSIS FLOW
         # =====================================================================
         import os
-        resume_path = os.path.join("..", "scratch_resume.pdf")
-        assert os.path.exists(resume_path), f"Resume path {resume_path} does not exist"
+        import tempfile
+
+        import fitz
+
+        # Generate a test resume PDF so the suite is self-contained
+        doc = fitz.open()
+        page = doc.new_page()
+        page.insert_text(
+            (50, 72),
+            "Jane Candidate - Python Developer\n\n"
+            "Skills: Python, FastAPI, SQL, Docker, Git\n\n"
+            "Experience:\n"
+            "Software Engineer building APIs with FastAPI and PostgreSQL.\n\n"
+            "Education:\n"
+            "B.Tech Computer Science\n",
+            fontsize=11,
+        )
+        tmpdir = tempfile.mkdtemp()
+        resume_path = os.path.join(tmpdir, "test_resume.pdf")
+        doc.save(resume_path)
+        doc.close()
 
         with open(resume_path, "rb") as f:
             upload_resp = await ac.post(

@@ -1,5 +1,5 @@
 from contextlib import asynccontextmanager
-from app.modules.auth.router import router as auth_router
+from .modules.auth.router import router as auth_router
 from app.modules.candidate.router import router as candidate_router
 from fastapi import FastAPI
 
@@ -29,9 +29,15 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+cors_origins = [
+    origin.strip()
+    for origin in settings.CORS_ORIGINS.split(",")
+    if origin.strip()
+] or ["http://localhost:5173", "http://127.0.0.1:5173"]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

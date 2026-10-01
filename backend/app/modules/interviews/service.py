@@ -58,14 +58,23 @@ class InterviewService:
                 status_code=status.HTTP_404_NOT_FOUND, detail="Recruiter profile not found"
             )
 
-        app = await ApplicationRepository.get_application_by_id(db, data.application_id)
+        app = await ApplicationRepository.get_by_id(db, data.application_id)
         if not app:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND, detail="Application not found"
             )
 
+        from app.modules.jobs.repository import JobRepository
+
+        job = await JobRepository.get_job_by_id(db, app.job_id)
+        if not job or job.recruiter_id != recruiter.id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Access denied: You do not own this job listing",
+            )
+
         # Update application status to 'interview'
-        await ApplicationRepository.update_application_status(db, app, "interview")
+        await ApplicationRepository.update_status(db, app, "interview")
 
         interview = Interview(
             application_id=data.application_id,
@@ -80,13 +89,13 @@ class InterviewService:
         )
         created = await InterviewRepository.create(db, interview)
 
-        # Notify candidate
-        if app.candidate and app.candidate.user_id:
-            job_title = app.job.title if app.job else "your application"
+        # Notify candidate (looked up by id to avoid async lazy loads)
+        candidate = await CandidateRepository.get_profile_by_id(db, app.candidate_id)
+        if candidate and candidate.user_id:
             notif = Notification(
-                user_id=app.candidate.user_id,
+                user_id=candidate.user_id,
                 title="Interview Scheduled! 🎉",
-                message=f"An interview for '{job_title}' ({data.round_name}) has been scheduled on {data.scheduled_at.strftime('%b %d, %Y at %I:%M %p')}.",
+                message=f"An interview for '{job.title}' ({data.round_name}) has been scheduled on {data.scheduled_at.strftime('%b %d, %Y at %I:%M %p')}.",
                 type="interview",
                 link="/candidate/dashboard?tab=interviews",
             )
@@ -126,6 +135,13 @@ class InterviewService:
         if not iv:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND, detail="Interview not found"
+            )
+
+        recruiter = await RecruiterRepository.get_profile_by_user_id(db, current_user.id)
+        if not recruiter or iv.recruiter_id != recruiter.id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Access denied: You do not own this interview",
             )
 
         updated = await InterviewRepository.update_status(

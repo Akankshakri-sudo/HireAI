@@ -3,7 +3,7 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.common.dependencies import get_db
+from .dependencies import get_db
 from app.modules.auth.jwt_handler import verify_token
 from app.modules.auth.repository import AuthRepository
 from app.modules.auth.models import User
@@ -37,6 +37,12 @@ async def get_current_user(
         raise HTTPException(
             status_code=401,
             detail="User not found"
+        )
+
+    if not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Inactive user account"
         )
 
     return user

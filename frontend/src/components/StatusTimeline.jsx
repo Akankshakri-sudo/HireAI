@@ -1,8 +1,9 @@
 import React from "react";
 import { Check, X } from "lucide-react";
+import { APPLICATION_TIMELINE_STEPS } from "../constants";
 
 export default function StatusTimeline({ currentStatus }) {
-  const steps = ["applied", "reviewed", "shortlisted", "selected"];
+  const steps = APPLICATION_TIMELINE_STEPS;
   const isRejected = currentStatus === "rejected";
   const currentIndex = steps.indexOf(currentStatus);
 

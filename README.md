@@ -4,6 +4,17 @@ HireAI is a next-generation recruitment and ATS matching system that connects de
 
 ---
 
+## AI Integration (Google Gemini)
+
+When a `GEMINI_API_KEY` is configured in `backend/.env`, two features are powered by Gemini:
+
+1. **Resume Analysis** — on upload, Gemini extracts the candidate's education, summarizes their experience, suggests concrete resume improvements, enriches the skill list beyond the keyword extractor, and assigns a 0–100 resume quality score.
+2. **Interview Question Sheets** — recruiters generate technical, coding, behavioral, and HR questions tailored to the specific candidate–job skill overlap (instead of a generic template bank).
+
+The LLM is optional and safe to omit: with no key (or on any Gemini error/timeout) the platform silently falls back to its built-in deterministic scoring and template questions, so nothing breaks.
+
+---
+
 ## Key Features
 
 ### 🧑‍💻 Candidate Flow
@@ -68,6 +79,16 @@ HireAI/
 Make sure you have a local PostgreSQL instance running with database credentials corresponding to the config:
 `postgresql+asyncpg://postgres:1234@localhost:5432/hireai_db`
 
+Backend configuration lives in `backend/.env` (see `backend/.env.example`):
+
+| Variable | Purpose |
+| --- | --- |
+| `DATABASE_URL` | Async PostgreSQL connection string |
+| `SECRET_KEY` | JWT signing secret — change it in production |
+| `ACCESS_TOKEN_EXPIRE_MINUTES` | Access token lifetime (default 60) |
+| `CORS_ORIGINS` | Comma-separated allowed origins; defaults to `http://localhost:5173,http://127.0.0.1:5173` |
+| `MAX_UPLOAD_SIZE_MB` | Resume upload size limit in MB (default 5) |
+
 ### 1. Launch the Backend Server
 From the root workspace directory, run:
 ```powershell
@@ -91,4 +112,10 @@ Ensure your server variables are configured and execute:
 cd backend
 $env:PYTHONPATH="."
 ..\.venv\Scripts\pytest tests
+```
+Unit tests (scoring/extraction logic, status validation) run without a database; the API tests in `tests/` use the live local database. A full end-to-end flow covering all 9 system modules (register → resume upload → job posting → matching → saved jobs → apply → review → interview scheduling → admin console) can be run against the live DB with:
+```powershell
+cd backend
+$env:PYTHONPATH="."
+..\.venv\Scripts\python test_all_features_e2e.py
 ```

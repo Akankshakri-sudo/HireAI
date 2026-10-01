@@ -154,12 +154,23 @@ class RecruiterService:
         db: AsyncSession,
         company_id: int,
         company_data: CompanyCreate,
+        current_user: User,
     ):
         company = await RecruiterRepository.get_company_by_id(db, company_id)
         if not company:
             raise HTTPException(
                 status_code=404,
                 detail="Company not found",
+            )
+
+        profile = await RecruiterRepository.get_profile_by_user_id(
+            db,
+            current_user.id,
+        )
+        if not profile or profile.company_id != company.id:
+            raise HTTPException(
+                status_code=403,
+                detail="Access denied: You are not a member of this company",
             )
 
         update_data = company_data.model_dump(exclude_unset=True)

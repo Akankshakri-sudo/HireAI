@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { getStoredUser } from "../utils/auth";
 import { Link, useNavigate, useLocation } from "react-router-dom";
 import { Menu, X, Briefcase, User as UserIcon, LayoutDashboard, Bookmark, Sparkles } from "lucide-react";
 import NotificationDropdown from "./NotificationDropdown";
@@ -8,8 +9,7 @@ export default function Navbar() {
   const location = useLocation();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
-  const userJson = localStorage.getItem("user");
-  const user = userJson ? JSON.parse(userJson) : null;
+  const user = getStoredUser();
 
   const handleLogout = () => {
     localStorage.removeItem("token");

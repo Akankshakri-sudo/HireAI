@@ -13,6 +13,17 @@ class Settings(BaseSettings):
     ALGORITHM: str
     ACCESS_TOKEN_EXPIRE_MINUTES: int
 
+    # Comma-separated list of allowed CORS origins. Falls back to the local
+    # Vite dev server when unset.
+    CORS_ORIGINS: str = ""
+    MAX_UPLOAD_SIZE_MB: int = 5
+
+    # Gemini LLM (optional). When GEMINI_API_KEY is empty the app falls back
+    # to the built-in heuristic scoring / template question generation.
+    GEMINI_API_KEY: str = ""
+    GEMINI_MODEL: str = "gemini-3.5-flash"
+    AI_TIMEOUT_SECONDS: float = 60.0
+
     @field_validator("DEBUG", mode="before")
     @classmethod
     def parse_debug(cls, value):

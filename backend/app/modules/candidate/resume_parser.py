@@ -1,5 +1,9 @@
+import logging
 import os
+
 import fitz
+
+logger = logging.getLogger(__name__)
 
 
 def extract_text_from_pdf(file_path: str) -> str:
@@ -14,7 +18,7 @@ def extract_text_from_pdf(file_path: str) -> str:
                 if text:
                     text_parts.append(text)
     except Exception as e:
-        print(f"PyMuPDF error: {e}")
+        logger.warning("PyMuPDF failed to extract text from %s: %s", file_path, e)
 
     extracted = "\n".join(text_parts).strip()
     if not extracted:
@@ -23,6 +27,6 @@ def extract_text_from_pdf(file_path: str) -> str:
             with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
                 extracted = f.read().strip()
         except Exception:
-            pass
+            logger.warning("Fallback text read failed for %s", file_path)
 
     return extracted

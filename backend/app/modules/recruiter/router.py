@@ -97,6 +97,7 @@ async def update_company(
         db,
         company_id,
         company_data,
+        current_user,
     )
 
 

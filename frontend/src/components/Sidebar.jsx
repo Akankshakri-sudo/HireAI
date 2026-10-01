@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { getStoredUser } from '../utils/auth';
 import { useNavigate, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard, Search, ClipboardList, Bookmark,
@@ -27,8 +28,7 @@ export default function Sidebar({ role = 'candidate' }) {
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
 
-  const userJson = localStorage.getItem('user');
-  const user = userJson ? JSON.parse(userJson) : null;
+  const user = getStoredUser();
 
   const menuItems = role === 'recruiter' ? recruiterMenuItems : candidateMenuItems;
 

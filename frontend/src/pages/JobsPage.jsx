@@ -1,4 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { getStoredUser } from '../utils/auth';
+import { EMPLOYMENT_TYPES } from '../constants';
 import { useNavigate } from 'react-router-dom';
 import {
   Search, MapPin, Clock, Briefcase, ChevronLeft, ChevronRight,
@@ -11,17 +13,14 @@ import { useToast } from '../components/Toast';
 
 const employmentTypes = [
   { label: 'All Types', value: '' },
-  { label: 'Full-time', value: 'full_time' },
-  { label: 'Part-time', value: 'part_time' },
-  { label: 'Contract', value: 'contract' },
-  { label: 'Internship', value: 'internship' },
-  { label: 'Remote', value: 'remote' },
+  ...EMPLOYMENT_TYPES,
 ];
 
 export default function JobsPage() {
   const [jobs, setJobs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const [searchInput, setSearchInput] = useState('');
   const [location, setLocation] = useState('');
   const [employmentType, setEmploymentType] = useState('');
   const [page, setPage] = useState(0);
@@ -32,8 +31,7 @@ export default function JobsPage() {
   const { showToast } = useToast();
   const navigate = useNavigate();
   const token = localStorage.getItem('token');
-  const userJson = localStorage.getItem('user');
-  const user = userJson ? JSON.parse(userJson) : null;
+  const user = getStoredUser();
 
   const fetchJobs = useCallback(async () => {
     setLoading(true);
@@ -62,10 +60,19 @@ export default function JobsPage() {
   useEffect(() => { fetchJobs(); }, [fetchJobs]);
   useEffect(() => { fetchSavedJobs(); }, [fetchSavedJobs]);
 
+  // Debounce the search box so we don't hit the API on every keystroke
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setSearch(searchInput);
+      setPage(0);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [searchInput]);
+
   const handleSearch = (e) => {
     e.preventDefault();
+    setSearch(searchInput);
     setPage(0);
-    fetchJobs();
   };
 
   const toggleSave = async (jobId) => {
@@ -139,8 +146,8 @@ export default function JobsPage() {
               <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-500" />
               <input
                 type="text"
-                value={search}
-                onChange={e => setSearch(e.target.value)}
+                value={searchInput}
+                onChange={e => setSearchInput(e.target.value)}
                 placeholder="Job title, skills, or keywords..."
                 className="w-full pl-12 pr-4 py-3.5 bg-[#0f172a] border border-gray-700 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/30 transition-all"
               />
@@ -187,7 +194,7 @@ export default function JobsPage() {
             ))}
             {(search || location || employmentType) && (
               <button
-                onClick={() => { setSearch(''); setLocation(''); setEmploymentType(''); setPage(0); }}
+                onClick={() => { setSearchInput(''); setSearch(''); setLocation(''); setEmploymentType(''); setPage(0); }}
                 className="px-4 py-2 rounded-full text-sm text-red-400 border border-red-500/20 hover:bg-red-500/10 flex items-center gap-1"
               >
                 <X className="w-3.5 h-3.5" /> Clear

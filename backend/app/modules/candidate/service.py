@@ -1,8 +1,11 @@
+import logging
 import os
 import uuid
 from fastapi import HTTPException, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.common.llm import coerce_str_list, generate_json, llm_enabled
+from app.core.config import settings
 from app.modules.auth.models import User
 from app.modules.candidate.models import Candidate, Resume, ResumeAnalysis
 from app.modules.candidate.repository import CandidateRepository
@@ -15,6 +18,8 @@ from app.modules.candidate.schemas import (
 from app.modules.candidate.resume_parser import extract_text_from_pdf
 from app.modules.candidate.skill_extractor import extract_skills
 from app.modules.candidate.ats_calculator import calculate_ats_score
+
+logger = logging.getLogger(__name__)
 
 
 class CandidateService:
@@ -90,6 +95,46 @@ class CandidateService:
         return await CandidateService._format_profile_response(db, updated)
 
     @staticmethod
+    async def _llm_resume_insights(
+        extracted_text: str,
+        keyword_skills: list[str],
+    ) -> dict:
+        """Ask Gemini for education/experience/suggestions/skill enrichment.
+
+        Returns {} when the LLM is disabled, unreachable, or unusable —
+        callers fall back to the deterministic heuristics.
+        """
+        if not extracted_text or not llm_enabled():
+            return {}
+
+        skills_line = ", ".join(keyword_skills) or "none"
+        prompt = f"""Analyze the resume text below.
+
+Known skills already detected by our parser: {skills_line}
+
+Resume text:
+---
+{extracted_text[:6000]}
+---
+
+Return ONLY a JSON object with these keys:
+{{
+  "education": "highest education/degree found, one short sentence, or null",
+  "experience": "one short sentence summarizing years and type of professional experience, or null",
+  "suggestions": "2-3 concrete, specific improvements for this exact resume",
+  "skills": [additional technical skills present in the resume but missing from the known list, lowercase, max 15],
+  "ats_score": an integer 0-100 judging overall resume quality (content, clarity, structure, impact)
+}}"""
+        raw = await generate_json(
+            prompt,
+            system=(
+                "You are an expert technical recruiter and resume reviewer. "
+                "Respond with JSON only."
+            ),
+        )
+        return raw if isinstance(raw, dict) else {}
+
+    @staticmethod
     async def upload_resume(
         db: AsyncSession, current_user: User, file: UploadFile
     ) -> ResumeUploadResponse:
@@ -117,6 +162,20 @@ class CandidateService:
         if not content:
             raise HTTPException(status_code=400, detail="Uploaded file is empty")
 
+        max_bytes = settings.MAX_UPLOAD_SIZE_MB * 1024 * 1024
+        if len(content) > max_bytes:
+            raise HTTPException(
+                status_code=413,
+                detail=f"File too large. Maximum upload size is {settings.MAX_UPLOAD_SIZE_MB}MB",
+            )
+
+        # Reject files whose content does not match the claimed extension.
+        if file_extension == ".pdf" and not content.startswith(b"%PDF"):
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid PDF file: content does not look like a PDF document",
+            )
+
         with open(file_path, "wb") as buffer:
             buffer.write(content)
 
@@ -129,18 +188,53 @@ class CandidateService:
         # Automatically extract text and skills immediately upon upload
         extracted_text = extract_text_from_pdf(file_path)
         skills = extract_skills(extracted_text) if extracted_text else []
-        
+
         # If no skills found from text, check if text has common tech terms
         if not skills and extracted_text:
             raw_words = [w.lower().strip(" ,.-/") for w in extracted_text.split() if len(w) > 2]
             skills = extract_skills(" ".join(raw_words))
 
-        ats_score = round(min(len(skills) * 12.5, 95.0), 1) if skills else 50.0
-        education = "Extracted from Resume" if "education" in extracted_text.lower() or "b.tech" in extracted_text.lower() or "b.s." in extracted_text.lower() else None
-        experience = "Extracted from Resume" if "experience" in extracted_text.lower() or "work" in extracted_text.lower() else None
-        suggestions = (
+        # LLM analysis (falls back to heuristics when Gemini is unavailable)
+        insights = await CandidateService._llm_resume_insights(extracted_text, skills)
+
+        llm_skills = {
+            s.strip().lower()
+            for s in coerce_str_list(insights.get("skills"), 15)
+            if s.strip()
+        }
+        merged_skills = sorted(set(skills) | llm_skills)
+
+        llm_score = insights.get("ats_score")
+        if isinstance(llm_score, (int, float)) and 0 <= llm_score <= 100:
+            ats_score = round(float(llm_score), 1)
+        else:
+            ats_score = round(min(len(merged_skills) * 12.5, 95.0), 1) if merged_skills else 50.0
+
+        def _clean(value) -> str | None:
+            return value.strip() if isinstance(value, str) and value.strip() else None
+
+        education = (
+            _clean(insights.get("education"))
+            or (
+                "Extracted from Resume"
+                if "education" in extracted_text.lower()
+                or "b.tech" in extracted_text.lower()
+                or "b.s." in extracted_text.lower()
+                else None
+            )
+        )
+        experience = (
+            _clean(insights.get("experience"))
+            or (
+                "Extracted from Resume"
+                if "experience" in extracted_text.lower()
+                or "work" in extracted_text.lower()
+                else None
+            )
+        )
+        suggestions = _clean(insights.get("suggestions")) or (
             "Great resume! Make sure to quantify your project achievements with numbers."
-            if len(skills) >= 5
+            if len(merged_skills) >= 5
             else "Consider explicitly listing key technologies and frameworks (e.g. Python, React, Docker) in a dedicated Skills section."
         )
 
@@ -148,7 +242,7 @@ class CandidateService:
             db=db,
             resume_id=saved_resume.id,
             extracted_text=extracted_text or "Uploaded document content",
-            skills=skills,
+            skills=merged_skills,
             ats_score=ats_score,
             education=education,
             experience=experience,
@@ -160,7 +254,7 @@ class CandidateService:
             candidate_id=profile.id,
             file_url=file_path,
             uploaded_at=saved_resume.uploaded_at,
-            skills_extracted=skills,
+            skills_extracted=merged_skills,
             ats_score=ats_score,
         )
 

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { getStoredUser } from '../utils/auth';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   MapPin, Clock, Building, Calendar, ArrowLeft, Bookmark, BookmarkCheck,
@@ -22,8 +23,7 @@ export default function JobDetailPage() {
   const [saved, setSaved] = useState(false);
 
   const token = localStorage.getItem('token');
-  const userJson = localStorage.getItem('user');
-  const user = userJson ? JSON.parse(userJson) : null;
+  const user = getStoredUser();
   const isCandidate = user?.role === 'candidate';
 
   useEffect(() => {

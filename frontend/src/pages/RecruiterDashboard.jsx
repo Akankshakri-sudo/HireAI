@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { EMPLOYMENT_TYPES } from '../constants';
 import { useNavigate } from 'react-router-dom';
 import Navbar from '../components/Navbar';
 import { useToast } from '../components/Toast';
@@ -17,7 +18,7 @@ const RecruiterDashboard = () => {
     totalJobs: 0,
     totalApplicants: 0,
     shortlisted: 0,
-    selected: 0
+    hired: 0
   });
   const [loading, setLoading] = useState(true);
   const [showNewJobModal, setShowNewJobModal] = useState(false);
@@ -25,7 +26,7 @@ const RecruiterDashboard = () => {
     title: '',
     company: '',
     location: '',
-    type: 'Full-time',
+    type: 'full-time',
     description: '',
     requirements: '',
     skills: '',
@@ -46,7 +47,7 @@ const RecruiterDashboard = () => {
     try {
       // Assuming jobsAPI.getRecruiterJobs or similar fetches jobs for this recruiter
       const [jobsRes, statsRes] = await Promise.all([
-        jobsAPI.getRecruiterJobs().catch(() => jobsAPI.getJobs()),
+        jobsAPI.getRecruiterJobs(),
         applicationsAPI.getRecruiterStats().catch(() => ({}))
       ]);
       setJobs(Array.isArray(jobsRes) ? jobsRes : []);
@@ -55,7 +56,7 @@ const RecruiterDashboard = () => {
         totalJobs: s.total_jobs ?? 0,
         totalApplicants: s.total_applicants ?? 0,
         shortlisted: s.shortlisted ?? 0,
-        selected: s.selected ?? 0
+        hired: s.hired ?? 0
       });
     } catch (error) {
       showToast('Failed to fetch dashboard data', 'error');
@@ -68,20 +69,21 @@ const RecruiterDashboard = () => {
     e.preventDefault();
     try {
       const skills = jobForm.skills.split(',').map(s => s.trim()).filter(Boolean);
+      const salaryValues = (jobForm.salary.match(/\d+/g) || []).map(Number).slice(0, 2);
       const formattedData = {
         title: jobForm.title,
         description: jobForm.description || 'Job description pending.',
         location: jobForm.location || null,
-        employment_type: jobForm.type || 'full_time',
+        employment_type: jobForm.type || 'full-time',
         skills_required: skills,
         minimum_experience: 0,
-        salary_min: jobForm.salary ? parseInt(jobForm.salary) : null,
-        salary_max: null,
+        salary_min: salaryValues[0] ?? null,
+        salary_max: salaryValues[1] ?? null,
       };
       await jobsAPI.createJob(formattedData);
       showToast('Job posted successfully!', 'success');
       setShowNewJobModal(false);
-      setJobForm({ title: '', company: '', location: '', type: 'Full-time', description: '', requirements: '', skills: '', salary: '' });
+      setJobForm({ title: '', company: '', location: '', type: 'full-time', description: '', requirements: '', skills: '', salary: '' });
       fetchDashboardData();
     } catch (error) {
       showToast(error.response?.data?.detail || 'Failed to post job', 'error');
@@ -143,7 +145,7 @@ const RecruiterDashboard = () => {
             { label: 'Total Jobs', value: stats.totalJobs, icon: Briefcase, color: 'text-teal-400', bg: 'bg-teal-400/10' },
             { label: 'Total Applicants', value: stats.totalApplicants, icon: Users, color: 'text-emerald-400', bg: 'bg-emerald-400/10' },
             { label: 'Shortlisted', value: stats.shortlisted, icon: UserCheck, color: 'text-blue-400', bg: 'bg-blue-400/10' },
-            { label: 'Selected', value: stats.selected, icon: Award, color: 'text-purple-400', bg: 'bg-purple-400/10' }
+            { label: 'Hired', value: stats.hired, icon: Award, color: 'text-purple-400', bg: 'bg-purple-400/10' }
           ].map((stat, idx) => (
             <div key={idx} className="bg-[#0f172a]/60 border border-gray-800/80 rounded-2xl p-6 flex items-center gap-4">
               <div className={`p-4 rounded-xl ${stat.bg}`}>
@@ -226,7 +228,7 @@ const RecruiterDashboard = () => {
 
                 <div className="flex items-center gap-3 mt-auto pt-4 border-t border-gray-800/50">
                   <button 
-                    onClick={() => navigate(`/recruiter/jobs/${job._id || job.id}`)}
+                    onClick={() => navigate(`/recruiter/job-applicants/${job._id || job.id}`)}
                     className="flex-1 py-2 bg-gray-800/50 hover:bg-gray-800 rounded-xl text-sm font-medium transition-colors"
                   >
                     View Details
@@ -308,10 +310,9 @@ const RecruiterDashboard = () => {
                     onChange={(e) => setJobForm({...jobForm, type: e.target.value})}
                     className="w-full bg-[#070b13] border border-gray-800 rounded-xl px-4 py-2.5 focus:outline-none focus:border-teal-500/50"
                   >
-                    <option>Full-time</option>
-                    <option>Part-time</option>
-                    <option>Contract</option>
-                    <option>Internship</option>
+                    {EMPLOYMENT_TYPES.map((t) => (
+                      <option key={t.value} value={t.value}>{t.label}</option>
+                    ))}
                   </select>
                 </div>
               </div>

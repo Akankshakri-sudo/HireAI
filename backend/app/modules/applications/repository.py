@@ -1,7 +1,9 @@
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.modules.applications.models import Application, InterviewQuestions
+from app.modules.candidate.models import Resume
 
 
 class ApplicationRepository:
@@ -28,17 +30,31 @@ class ApplicationRepository:
     ):
         db.add(application)
         await db.commit()
-        await db.refresh(application)
 
-        return application
+        # Re-select with the resume->analysis chain loaded so the response
+        # serializer never triggers an async lazy load.
+        result = await db.execute(
+            select(Application)
+            .options(
+                selectinload(Application.resume).selectinload(Resume.analysis),
+            )
+            .where(Application.id == application.id)
+        )
+        return result.scalar_one()
 
     @staticmethod
     async def get_candidate_applications(
         db: AsyncSession,
         candidate_id: int,
     ):
+        # ApplicationResponse serializes resume_analysis_id via the
+        # resume -> analysis relationships, so both must be eager-loaded
+        # to avoid a lazy-load in async context.
         result = await db.execute(
             select(Application)
+            .options(
+                selectinload(Application.resume).selectinload(Resume.analysis),
+            )
             .where(
                 Application.candidate_id == candidate_id
             )
@@ -53,9 +69,25 @@ class ApplicationRepository:
         application_id: int,
     ):
         result = await db.execute(
-            select(Application).where(Application.id == application_id)
+            select(Application)
+            .options(
+                selectinload(Application.resume).selectinload(Resume.analysis),
+            )
+            .where(Application.id == application_id)
         )
         return result.scalar_one_or_none()
+
+    @staticmethod
+    async def update_status(
+        db: AsyncSession,
+        application: Application,
+        status: str,
+    ) -> Application:
+        application.status = status
+        await db.commit()
+        # Re-select with the resume->analysis chain loaded so the response
+        # serializer never triggers an async lazy load.
+        return await ApplicationRepository.get_by_id(db, application.id)
 
     @staticmethod
     async def get_job_applications_detailed(
@@ -154,12 +186,12 @@ class ApplicationRepository:
         
         result = await db.execute(app_stmt)
         status_counts = {status: count for status, count in result.all()}
-        
+
         return {
             "total_jobs": total_jobs,
             "total_applicants": sum(status_counts.values()),
             "shortlisted": status_counts.get("shortlisted", 0),
-            "selected": status_counts.get("selected", 0),
-            "reviewed": status_counts.get("reviewed", 0),
+            "interviewing": status_counts.get("interview", 0),
+            "hired": status_counts.get("hired", 0),
             "rejected": status_counts.get("rejected", 0),
         }

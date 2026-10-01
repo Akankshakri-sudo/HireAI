@@ -147,4 +147,7 @@ class Job(Base):
 
     @property
     def company_name(self) -> str | None:
-        return self.company.company_name if self.company else None
+        if "company" in self.__dict__ and self.company:
+            return self.company.company_name
+        return None
+

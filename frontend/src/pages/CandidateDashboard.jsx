@@ -128,7 +128,12 @@ export default function CandidateDashboard() {
     const matchesLocation = !filters.location || 
       match.location?.toLowerCase().includes(filters.location.toLowerCase());
 
-    return matchesSearch && matchesType && matchesLocation;
+    const matchesSalaryMin = !filters.salary_min || 
+      (match.salary_min != null && match.salary_min >= Number(filters.salary_min));
+    const matchesSalaryMax = !filters.salary_max || 
+      (match.salary_max != null && match.salary_max <= Number(filters.salary_max));
+
+    return matchesSearch && matchesType && matchesLocation && matchesSalaryMin && matchesSalaryMax;
   });
 
   if (isLoading) {
@@ -266,7 +271,7 @@ export default function CandidateDashboard() {
               <div className="animate-[fadeIn_0.3s_ease-out] space-y-6">
                 <SearchFilters 
                   onSearch={(q) => setSearchQuery(q)}
-                  onFilterChange={(f) => setFilters(f)}
+                  onFilter={(f) => setFilters(f)}
                 />
 
                 {filteredJobs.length === 0 ? (

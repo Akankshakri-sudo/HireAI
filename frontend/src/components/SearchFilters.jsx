@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { Search, Filter, X, ChevronDown } from "lucide-react";
+import { EMPLOYMENT_TYPES } from "../constants";
 
 export default function SearchFilters({ onSearch, onFilter, filters = {} }) {
   const [query, setQuery] = useState("");
@@ -101,10 +102,9 @@ export default function SearchFilters({ onSearch, onFilter, filters = {} }) {
               className={`${inputClass} w-full cursor-pointer`}
             >
               <option value="">All Types</option>
-              <option value="full-time">Full-time</option>
-              <option value="part-time">Part-time</option>
-              <option value="contract">Contract</option>
-              <option value="internship">Internship</option>
+              {EMPLOYMENT_TYPES.map((t) => (
+                <option key={t.value} value={t.value}>{t.label}</option>
+              ))}
             </select>
           </div>
           <div>

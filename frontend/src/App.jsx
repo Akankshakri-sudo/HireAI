@@ -13,12 +13,13 @@ import JobsPage from "./pages/JobsPage";
 import JobDetailPage from "./pages/JobDetailPage";
 import SavedJobsPage from "./pages/SavedJobsPage";
 import AdminDashboard from "./pages/AdminDashboard";
+import NotFoundPage from "./pages/NotFoundPage";
+import { getStoredUser } from "./utils/auth";
 
 // A route protector based on login state and user role
 const ProtectedRoute = ({ children, allowedRole }) => {
   const token = localStorage.getItem("token");
-  const userJson = localStorage.getItem("user");
-  const user = userJson ? JSON.parse(userJson) : null;
+  const user = getStoredUser();
 
   if (!token || !user) {
     return <Navigate to="/login" replace />;
@@ -108,7 +109,7 @@ function App() {
           />
 
           {/* Fallback Catch-All */}
-          <Route path="*" element={<Navigate to="/" replace />} />
+          <Route path="*" element={<NotFoundPage />} />
         </Routes>
       </BrowserRouter>
     </ToastProvider>
